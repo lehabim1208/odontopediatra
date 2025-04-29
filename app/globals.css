@@ -1,0 +1,430 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 100% 95%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 80%; /* Bordes más oscuros en modo claro */
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    --radius: 0.5rem;
+
+    --sidebar: 210 50% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 210 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 50% 95%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 210 50% 90%;
+    --sidebar-ring: 210 100% 50%;
+    --sidebar-background: 210 50% 98%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 0 0% 100%; /* Texto general en blanco */
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 100%; /* Texto de tarjetas en blanco */
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 100%; /* Texto de popovers en blanco */
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%; /* Texto en botones primarios en blanco */
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 0 0% 100%; /* Texto secundario en blanco */
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 210 70% 80%; /* Texto muted en azul claro */
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 0 0% 100%; /* Texto de acento en blanco */
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+
+    --sidebar-background: 222.2 47.4% 11.2%;
+    --sidebar-foreground: 0 0% 100%; /* Texto de sidebar en blanco */
+    --sidebar-primary: 210 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%; /* Texto en botones primarios de sidebar en blanco */
+    --sidebar-accent: 215 27.9% 16.9%;
+    --sidebar-accent-foreground: 0 0% 100%; /* Texto de acento de sidebar en blanco */
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 224.3 76.3% 48%;
+  }
+
+  /* Agregar estos estilos para quitar el recuadro de focus en los inputs */
+  /* input:focus,
+  textarea:focus,
+  select:focus {
+    --tw-ring-offset-width: 0px !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+    outline: none !important;
+  }
+
+  .focus\:ring-0:focus {
+    --tw-ring-offset-width: 0px !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+  }
+
+  .focus\:ring-offset-0:focus {
+    --tw-ring-offset-width: 0px !important;
+  } */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Añadir estilos para los inputs de fecha y hora para que sean visibles en modo oscuro */
+  .date-input::-webkit-calendar-picker-indicator,
+  .time-input::-webkit-calendar-picker-indicator {
+    filter: invert(0.5);
+  }
+
+  .dark .date-input::-webkit-calendar-picker-indicator,
+  .dark .time-input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
+  /* Mejorar la visibilidad de los bordes en modo claro */
+  .border {
+    border-color: rgba(0, 0, 0, 0.2); /* Bordes más oscuros en modo claro */
+  }
+
+  .dark .border {
+    border-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* Aseguramos que los textos en modo oscuro sean blancos por defecto */
+  .dark h1,
+  .dark h2,
+  .dark h3,
+  .dark h4,
+  .dark h5,
+  .dark p,
+  .dark span,
+  .dark div,
+  .dark a,
+  .dark button,
+  .dark label,
+  .dark input,
+  .dark textarea,
+  .dark select {
+    color: hsl(0, 0%, 100%);
+  }
+
+  /* Asegurar que los botones primarios en modo oscuro tengan fondo azul y texto blanco */
+  .dark .btn-primary,
+  .dark button[data-variant="default"],
+  .dark button[data-variant="primary"],
+  .dark .bg-primary,
+  .dark .btn-blue,
+  .dark button[data-state="open"],
+  .dark button[aria-selected="true"] {
+    background-color: hsl(210, 100%, 50%);
+    color: hsl(0, 0%, 100%);
+  }
+
+  /* Mejorar el hover de los botones en modo oscuro */
+  .dark .hover\:bg-primary\/90:hover {
+    background-color: rgba(59, 130, 246, 0.7); /* Azul más oscuro para mejor contraste */
+  }
+
+  /* Excepciones para elementos específicos que deben ser azules */
+  .dark .text-primary,
+  .dark .brand-name,
+  .dark .section-title {
+    color: hsl(210, 100%, 50%);
+  }
+
+  .dark .text-destructive {
+    color: hsl(0, 84.2%, 60.2%);
+  }
+
+  /* Asegurar que los iconos de fecha y hora sean azules */
+  .date-time-icon {
+    color: hsl(210, 100%, 50%);
+  }
+
+  /* Estilos para el sidebar en modo oscuro */
+  .dark .bg-sidebar {
+    background-color: hsl(222.2, 47.4%, 11.2%);
+  }
+}
+
+/* Preloader animation */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-custom {
+  animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Clases específicas para el nombre de la clínica y títulos */
+.brand-name {
+  @apply text-primary font-bold;
+}
+
+.section-title {
+  @apply text-primary font-semibold;
+}
+
+/* Estilo para el avatar de login */
+.login-avatar {
+  width: 80px; /* Aumentado de 64px a 80px */
+  height: 80px; /* Aumentado de 64px a 80px */
+  border-radius: 50%;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Estilos para el login en modo oscuro */
+.dark .login-card {
+  background-color: #1e293b;
+  border-color: #334155;
+}
+
+.dark .login-header {
+  background-color: #1e293b;
+}
+
+.dark .login-content {
+  background-color: #1e293b;
+}
+
+.dark .login-tab {
+  background-color: #334155;
+  color: #e2e8f0;
+}
+
+.dark .login-tab-active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* Estilos para el modal de radiografías */
+.radiografia-modal {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.radiografia-imagen {
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+/* Estilos para páginas sin menú */
+.no-sidebar-page {
+  width: 100% !important;
+  margin-left: 0 !important;
+  padding: 1.5rem !important;
+}
+
+.no-sidebar-page {
+  @apply md:pl-0; /* Elimina el padding en pantallas medianas y grandes */
+}
+
+.no-sidebar-page .md\:grid-cols-\[300px_1fr\] {
+  grid-template-columns: 1fr; /* Hace que la segunda columna ocupe todo el espacio */
+}
+
+.no-sidebar-page .md\:grid-cols-\[300px_1fr\] > * {
+  width: 100%; /* Asegura que los hijos ocupen todo el ancho */
+}
+
+.no-sidebar-page .md\:grid-cols-\[300px_1fr\] > *:first-child {
+  display: none; /* Oculta la primera columna en pantallas medianas y grandes */
+}
+
+.no-sidebar-page .md\:grid-cols-\[300px_1fr\] > *:last-child {
+  margin: 0 auto; /* Centra el contenido restante */
+  max-width: 800px; /* Opcional: establece un ancho máximo */
+}
+
+.radiografia-modal .radiografia-imagen {
+  max-width: 100%;
+  max-height: 600px;
+  display: block;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .no-sidebar-page {
+    padding: 2.5rem !important;
+  }
+}
+
+/* Agregar estilos para hacer responsivos los modales */
+@media (max-width: 640px) {
+  .radiografia-modal {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+
+  .radiografia-imagen {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Asegurar que los contenedores con scroll horizontal sean responsivos */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Estilos para el menú móvil desplegable desde arriba */
+.mobile-menu-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.mobile-menu {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Mejorar la visualización de modales en móviles */
+@media (max-width: 640px) {
+  [role="dialog"] {
+    max-width: 95vw !important;
+    width: 95vw !important;
+  }
+
+  /* Ajustar el tamaño de texto para móviles */
+  h1 {
+    font-size: 1.75rem !important;
+  }
+
+  h2 {
+    font-size: 1.5rem !important;
+  }
+
+  /* Asegurar que las tablas tengan scroll horizontal en móviles */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+/* Añadir estos estilos al final del archivo para la barra de desplazamiento personalizada */
+
+/* Estilos para la barra de desplazamiento personalizada */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(155, 155, 155, 0.7);
+}
+
+/* Para Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+}
+
+/* Estilos adicionales para mejorar la responsividad */
+@media (max-width: 768px) {
+  /* Dar espacio para el botón de menú en móviles */
+  main {
+    padding-top: 4rem !important;
+  }
+
+  /* Mejorar la visualización de las tarjetas en móviles */
+  .card {
+    padding: 1rem !important;
+  }
+
+  /* Asegurar que los botones sean lo suficientemente grandes para tocar */
+  button,
+  .button,
+  [role="button"] {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+  }
+
+  /* Mejorar la visualización de los formularios */
+  form {
+    width: 100%;
+  }
+
+  /* Asegurar que los inputs sean lo suficientemente grandes */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important; /* Evita el zoom en iOS */
+  }
+}
+
+/* Agregar al final del archivo globals.css */
+
+/* Clase para ocultar la barra de desplazamiento pero mantener la funcionalidad */
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
