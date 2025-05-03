@@ -2,13 +2,13 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, FileText, Calendar, Filter, PlusCircle, X, FilePlus, ArrowUp, ArrowDown, History, Stethoscope, FolderArchive, TableCellsMerge } from "lucide-react"
+import { Plus, Search, FileText, Calendar, Filter, PlusCircle, X, FilePlus, ArrowUp, ArrowDown, History, Stethoscope, FolderArchive, TableCellsMerge, ChevronLeft, ChevronRight } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -111,7 +111,7 @@ const sortPatients = (patients: Patient[], sortConfig: SortConfig) => {
 export default function PacientesPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { hasPermission } = useAuth() // Añadir esta línea
+  const { hasPermission } = useAuth();
   const [searchQuery, setSearchQuery] = useState("")
   const [showNewPatientDialog, setShowNewPatientDialog] = useState(false)
   const [showHistoryDialog, setShowHistoryDialog] = useState(false)
@@ -193,6 +193,114 @@ export default function PacientesPage() {
   })
 
   const [patients, setPatients] = useState<Patient[]>([])
+  const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(0)
+  const [pageCache, setPageCache] = useState<{ [key: number]: Patient[] }>({})
+  const [totalPatients, setTotalPatients] = useState(0)
+  const pageSize = 10
+  const isInitialRender = useRef(true)
+
+  const totalFiltered = useMemo(() => {
+    let filtered = patients
+    if (searchQuery.trim() !== "") {
+      filtered = filtered.filter(
+        (patient) =>
+          patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          patient.guardian.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    }
+    if (ageFilter !== "") {
+      filtered = filtered.filter((patient) => patient.age === Number(ageFilter))
+    }
+    if (guardianFilter !== "") {
+      filtered = filtered.filter((patient) => patient.guardian.toLowerCase().includes(guardianFilter.toLowerCase()))
+    }
+    return filtered.length
+  }, [patients, searchQuery, ageFilter, guardianFilter])
+
+  // Determinar el total de páginas y si hay más páginas según el modo
+  const isSearchMode = searchQuery.trim() !== "" || ageFilter !== "" || guardianFilter !== ""
+  const totalItems = isSearchMode ? totalFiltered : totalPatients
+  const totalPages = Math.ceil(totalItems / pageSize)
+  const canGoNext = page + 1 < totalPages
+  const canGoPrev = page > 0
+
+  // Memoizar el filtrado, orden y paginación para máximo rendimiento
+  const filteredPatients = useMemo(() => {
+    if (!isSearchMode) {
+      // Paginación backend: mostrar directamente lo que devuelve la API
+      return sortPatients(patients, sortConfig)
+    }
+    // Paginación local (búsqueda/filtros)
+    let filtered = patients
+    if (searchQuery.trim() !== "") {
+      filtered = filtered.filter(
+        (patient) =>
+          patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          patient.guardian.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    }
+    if (ageFilter !== "") {
+      filtered = filtered.filter((patient) => patient.age === Number(ageFilter))
+    }
+    if (guardianFilter !== "") {
+      filtered = filtered.filter((patient) => patient.guardian.toLowerCase().includes(guardianFilter.toLowerCase()))
+    }
+    filtered = sortPatients(filtered, sortConfig)
+    return filtered.slice(page * pageSize, (page + 1) * pageSize)
+  }, [patients, searchQuery, ageFilter, guardianFilter, sortConfig, page, pageSize, isSearchMode])
+
+  // Cargar pacientes paginados o búsqueda global
+  useEffect(() => {
+    setLoading(true)
+    if (searchQuery.trim() !== "") {
+      // Búsqueda global
+      fetch(`/api/pacientes?search=${encodeURIComponent(searchQuery.trim())}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setPatients(data.patients)
+          setTotalPatients(data.total)
+          setLoading(false)
+        })
+        .catch(() => setLoading(false))
+    } else {
+      // Paginación normal
+      fetch(`/api/pacientes?limit=${pageSize}&offset=${page * pageSize}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setPatients(data.patients)
+          setTotalPatients(data.total)
+          setPageCache((prev) => ({ ...prev, [page]: data.patients }))
+          setLoading(false)
+        })
+        .catch(() => setLoading(false))
+    }
+  }, [page, searchQuery])
+
+  // Pre-cargar la siguiente página en segundo plano después del primer render
+  useEffect(() => {
+    if (isInitialRender.current && totalPatients > pageSize) {
+      isInitialRender.current = false
+      const nextPage = page + 1
+      if (!pageCache[nextPage]) {
+        fetch(`/api/pacientes?limit=${pageSize}&offset=${nextPage * pageSize}`)
+          .then((res) => res.json())
+          .then((data) => {
+            setPageCache((prev) => ({ ...prev, [nextPage]: data.patients }))
+          })
+      }
+    }
+  }, [totalPatients, page, pageCache])
+
+  // Cambiar de página
+  const handlePageChange = (newPage: number) => {
+    if (pageCache[newPage]) {
+      setPatients(pageCache[newPage])
+      setPage(newPage)
+    } else {
+      setPage(newPage)
+    }
+  }
 
   // Agregar estos estados después de los estados existentes
   const [showTreatmentDialog, setShowTreatmentDialog] = useState(false)
@@ -209,26 +317,6 @@ export default function PacientesPage() {
   const [showTreatmentDetails, setShowTreatmentDetails] = useState(false)
   // Agregar este estado al componente PacientesPage, justo después de los otros estados
   const [showTermsDialog, setShowTermsDialog] = useState(false)
-
-  useEffect(() => {
-    const storedPatients = storage.getItem("patients")
-    if (storedPatients) {
-      setPatients(storedPatients)
-    }
-  }, [])
-
-  // Filter patients based on search query and filters
-  // Modificar la definición de filteredPatients para incluir el ordenamiento
-  const filteredPatients = sortPatients(
-    patients.filter(
-      (patient) =>
-        (patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          patient.guardian.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        (ageFilter === "" || patient.age === Number(ageFilter)) &&
-        (guardianFilter === "" || patient.guardian.toLowerCase().includes(guardianFilter.toLowerCase())),
-    ),
-    sortConfig,
-  )
 
   // Validate email format
   const isValidEmail = (email: string) => {
@@ -253,9 +341,7 @@ export default function PacientesPage() {
   }
 
   // Handle new patient form submission
-  // Modificar la función handleAddPatient para eliminar la validación de edad 1-17
-  const handleAddPatient = () => {
-    // Validar campos obligatorios
+  const handleAddPatient = async () => {
     if (!newPatient.name || !newPatient.age || !newPatient.guardian || !newPatient.phone) {
       toast({
         title: "Error",
@@ -265,8 +351,6 @@ export default function PacientesPage() {
       })
       return
     }
-
-    // Validate phone (must be exactly 10 digits)
     if (!isValidPhone(newPatient.phone)) {
       toast({
         title: "Error",
@@ -276,8 +360,6 @@ export default function PacientesPage() {
       })
       return
     }
-
-    // Validate additional phones if they exist
     if (
       newPatient.additionalPhones.length > 0 &&
       newPatient.additionalPhones.some((phone) => phone.trim() === "" || !isValidPhone(phone))
@@ -290,8 +372,6 @@ export default function PacientesPage() {
       })
       return
     }
-
-    // Validate email if provided
     if (newPatient.email && !isValidEmail(newPatient.email)) {
       toast({
         title: "Error",
@@ -301,43 +381,58 @@ export default function PacientesPage() {
       })
       return
     }
-
-    const newId = patients.length > 0 ? Math.max(...patients.map((p: any) => p.id)) + 1 : 1
-    const today = new Date().toLocaleDateString("es-MX")
-
-    const newPatientData: Patient = {
-      id: newId,
-      name: newPatient.name,
-      age: Number.parseInt(newPatient.age),
-      guardian: newPatient.guardian,
-      lastVisit: today,
-      nextVisit: "Pendiente",
-      phone: newPatient.phone,
-      additionalPhones: newPatient.additionalPhones,
-      email: newPatient.email,
-      medicalInfo: null,
+    try {
+      const res = await fetch("/api/pacientes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newPatient.name,
+          guardian: newPatient.guardian,
+          age: newPatient.age,
+          phone: newPatient.phone,
+          additionalPhone: newPatient.additionalPhones[0] || null,
+          email: newPatient.email,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Error al registrar paciente")
+      toast({
+        title: "Éxito",
+        description: "Paciente agregado correctamente",
+        variant: "success",
+        duration: 2500,
+      })
+      setShowNewPatientDialog(false)
+      setNewPatient({ name: "", age: "", guardian: "", phone: "", additionalPhones: [], email: "" })
+      // Refresca la lista de pacientes
+      setLoading(true)
+      fetch("/api/pacientes")
+        .then((res) => res.json())
+        .then((data) => {
+          const pacientes = (data || []).map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            age: p.edad,
+            guardian: p.guardian,
+            lastVisit: p.lastVisit ? new Date(p.lastVisit).toLocaleDateString("es-MX") : "",
+            nextVisit: "Pendiente",
+            phone: p.phone,
+            additionalPhones: p.additionalPhone ? [p.additionalPhone] : [],
+            email: p.email,
+            medicalInfo: null,
+          }))
+          setPatients(pacientes)
+          setLoading(false)
+        })
+        .catch(() => setLoading(false))
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Error al registrar paciente",
+        variant: "destructive",
+        duration: 2500,
+      })
     }
-
-    const updatedPatients = [...patients, newPatientData]
-    setPatients(updatedPatients)
-    storage.setItem("patients", updatedPatients)
-
-    setNewPatient({
-      name: "",
-      age: "",
-      guardian: "",
-      phone: "",
-      additionalPhones: [],
-      email: "",
-    })
-    setShowNewPatientDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: "Paciente agregado correctamente",
-      variant: "success",
-      duration: 2500,
-    })
   }
 
   // Handle additional info submission
@@ -518,11 +613,6 @@ export default function PacientesPage() {
   const handleApprovalRequest = () => {
     setFingerprintData(null)
     setShowApprovalDialog(true)
-  }
-
-  // Agregar esta función después de handleApprovalRequest
-  const handleFingerprintCapture = (data: string) => {
-    setFingerprintData(data)
   }
 
   // Agregar esta función para manejar el clic en un tratamiento
@@ -805,6 +895,11 @@ export default function PacientesPage() {
     }
   }
 
+  // Agrega la función faltante para la huella digital
+  const handleFingerprintCapture = (data: string | null) => {
+    setFingerprintData(data)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -847,6 +942,16 @@ export default function PacientesPage() {
           <CardTitle className="section-title">Lista de Pacientes</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Paginación superior */}
+          <div className="flex justify-center mt-2 mb-4 gap-2">
+            <Button variant="outline" onClick={() => handlePageChange(page - 1)} disabled={!canGoPrev} size="icon">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="px-2 py-1 text-sm">Página {page + 1}</span>
+            <Button variant="outline" onClick={() => handlePageChange(page + 1)} disabled={!canGoNext} size="icon">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <div className="overflow-x-auto">
             <Table>
               {/* Reemplazar el encabezado de la tabla en el componente TableHeader */}
@@ -904,8 +1009,8 @@ export default function PacientesPage() {
                       </TableCell>
                       <TableCell className="hidden md:table-cell">{patient.age} años</TableCell>
                       <TableCell className="hidden md:table-cell">{patient.guardian}</TableCell>
-                      <TableCell className="hidden md:table-cell">{patient.lastVisit}</TableCell>
-                      <TableCell className="hidden md:table-cell">{patient.nextVisit}</TableCell>
+                      <TableCell className="hidden md:table-cell">{patient.lastVisit ? format(new Date(patient.lastVisit), "dd/MM/yyyy HH:mm") : ""}</TableCell>
+                      <TableCell className="hidden md:table-cell">Pendiente</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -916,6 +1021,7 @@ export default function PacientesPage() {
                           >
                             <History className="h-4 w-4" />
                           </Button>
+                          {hasPermission("citas") && (
                           <Button
                             variant="outline"
                             size="icon"
@@ -924,6 +1030,7 @@ export default function PacientesPage() {
                           >
                             <Calendar className="h-4 w-4" />
                           </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="icon"
@@ -940,24 +1047,28 @@ export default function PacientesPage() {
                           >
                             <PlusCircle className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            title="Ver Odontograma Digital"
-                            onClick={() => handleViewOdontograma(patient.id)}
-                          >
-                            <span className="sr-only">Ver Odontograma Digital</span>
-                            <TableCellsMerge className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            title="Ver Documentos Médicos"
-                            onClick={() => handleViewRadiografias(patient.id)}
-                          >
-                            <span className="sr-only">Ver Documentos Médicos</span>
-                            <FolderArchive className="h-4 w-4" />
-                          </Button>
+                          {hasPermission("odontograma") && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              title="Ver Odontograma Digital"
+                              onClick={() => handleViewOdontograma(patient.id)}
+                            >
+                              <span className="sr-only">Ver Odontograma Digital</span>
+                              <TableCellsMerge className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {hasPermission("radiografias") && (
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              title="Ver Documentos Médicos"
+                              onClick={() => handleViewRadiografias(patient.id)}
+                            >
+                              <span className="sr-only">Ver Documentos Médicos</span>
+                              <FolderArchive className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -971,6 +1082,16 @@ export default function PacientesPage() {
                 )}
               </TableBody>
             </Table>
+            {/* Paginación inferior */}
+            <div className="flex justify-center mt-4 gap-2">
+              <Button variant="outline" onClick={() => handlePageChange(page - 1)} disabled={!canGoPrev} size="icon">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-2 py-1 text-sm">Página {page + 1}</span>
+              <Button variant="outline" onClick={() => handlePageChange(page + 1)} disabled={!canGoNext} size="icon">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

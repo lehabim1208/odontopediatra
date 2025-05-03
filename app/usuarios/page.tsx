@@ -16,11 +16,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { storage } from "@/lib/storage"
 import { useToast } from "@/components/ui/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuth } from "@/components/auth-provider"
 import { Switch } from "@/components/ui/switch"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
 // Corregir la interfaz User y el estado inicial
 interface User {
@@ -66,6 +66,14 @@ export default function UsuariosPage() {
   const [users, setUsers] = useState<User[]>([])
   const [newUser, setNewUser] = useState(defaultNewUser)
 
+  // Estado para password y confirmPassword en edición
+  const [editPassword, setEditPassword] = useState("");
+  const [editConfirmPassword, setEditConfirmPassword] = useState("");
+
+  // Estado para el usuario a eliminar y el modal de confirmación
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
   // Verificar si el usuario es doctor
   // Modificar el useEffect para actualizar los usuarios por defecto
   useEffect(() => {
@@ -73,63 +81,10 @@ export default function UsuariosPage() {
       router.push("/")
       return
     }
-
-    // Cargar usuarios
-    const storedUsers = storage.getItem("users") || []
-    if (storedUsers.length === 0) {
-      // Si no hay usuarios, crear los usuarios por defecto
-      const defaultUsers = [
-        {
-          id: 1,
-          name: "Emmanuel",
-          username: "admin",
-          email: "emmanuel@gmail.com",
-          password: "admin",
-          role: "doctor",
-          permissions: {
-            pacientes: true,
-            citas: true,
-            odontograma: true,
-            radiografias: true,
-            usuarios: true,
-            configuracion: true,
-            clinic: true,
-          },
-        },
-        {
-          id: 2,
-          name: "Karla",
-          username: "karla",
-          email: "secretaria@gmail.com",
-          password: "karla",
-          role: "secretary",
-          permissions: {
-            pacientes: true,
-            citas: true,
-            odontograma: false,
-            radiografias: false,
-            usuarios: false,
-            configuracion: true,
-            clinic: false,
-          },
-        },
-      ]
-      setUsers(defaultUsers)
-      storage.setItem("users", defaultUsers)
-    } else {
-      // Ensure existing users have the correct usernames
-      const updatedUsers = storedUsers.map((user: any) => {
-        if (user.id === 1 && user.name === "Emmanuel" && user.role === "doctor") {
-          return { ...user, username: "admin" }
-        }
-        if (user.id === 2 && user.name === "Karla" && user.role === "secretary") {
-          return { ...user, username: "karla" }
-        }
-        return user
-      })
-      setUsers(updatedUsers)
-      storage.setItem("users", updatedUsers)
-    }
+    fetch("/api/usuarios")
+      .then(res => res.json())
+      .then(setUsers)
+      .catch(() => setUsers([]))
   }, [userRole, router, hasPermission])
 
   // Filter users based on search query and filters
@@ -176,44 +131,20 @@ export default function UsuariosPage() {
 
   // Handle new user form submission
   // Modificar la función handleAddUser para incluir el nombre de usuario
-  const handleAddUser = () => {
-    // Validar campos obligatorios
+  const handleAddUser = async () => {
     if (!newUser.name || !newUser.username || !newUser.email || !newUser.password || !newUser.confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Por favor complete todos los campos obligatorios",
-        variant: "destructive",
-        duration: 2500,
-      })
+      toast({ title: "Error", description: "Por favor complete todos los campos obligatorios", variant: "destructive", duration: 2500 })
       return
     }
-
-    // Validate email
     if (!isValidEmail(newUser.email)) {
-      toast({
-        title: "Error",
-        description: "El formato del correo electrónico no es válido",
-        variant: "destructive",
-        duration: 2500,
-      })
+      toast({ title: "Error", description: "El formato del correo electrónico no es válido", variant: "destructive", duration: 2500 })
       return
     }
-
-    // Validate password match
     if (newUser.password !== newUser.confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Las contraseñas no coinciden",
-        variant: "destructive",
-        duration: 2500,
-      })
+      toast({ title: "Error", description: "Las contraseñas no coinciden", variant: "destructive", duration: 2500 })
       return
     }
-
-    const newId = users.length > 0 ? Math.max(...users.map((u) => u.id)) + 1 : 1
-
-    const newUserData: User = {
-      id: newId,
+    const userData = {
       name: newUser.name,
       username: newUser.username,
       email: newUser.email,
@@ -229,94 +160,133 @@ export default function UsuariosPage() {
         clinic: newUser.role === "doctor",
       },
     }
-
-    const updatedUsers = [...users, newUserData]
-    setUsers(updatedUsers)
-    storage.setItem("users", updatedUsers)
-
-    setNewUser(defaultNewUser)
-    setShowNewUserDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: "Usuario agregado correctamente",
-      variant: "success",
-      duration: 2500,
+    const res = await fetch("/api/usuarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(userData),
     })
+    const data = await res.json()
+    if (res.ok) {
+      setShowNewUserDialog(false)
+      setNewUser(defaultNewUser)
+      fetch("/api/usuarios").then(r => r.json()).then(setUsers)
+      toast({ title: "Éxito", description: "Usuario agregado correctamente", variant: "success", duration: 2500 })
+    } else {
+      toast({ title: "Error", description: data.error || "No se pudo agregar el usuario", variant: "destructive", duration: 2500 })
+    }
   }
 
-  // Handle edit user form submission
-  const handleEditUser = () => {
-    if (!selectedUser) return
-
-    // Validate email
-    if (!isValidEmail(selectedUser.email)) {
-      toast({
-        title: "Error",
-        description: "El formato del correo electrónico no es válido",
-        variant: "destructive",
-        duration: 2500,
-      })
-      return
+  // Modifica handleEditUser para proteger al admin y manejar errores de API
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
+    if (selectedUser.id === 1) {
+      toast({ title: "Error", description: "No se puede editar el usuario administrador principal", variant: "destructive", duration: 2500 });
+      return;
     }
-
-    const updatedUsers = users.map((user) => (user.id === selectedUser.id ? selectedUser : user))
-
-    setUsers(updatedUsers)
-    storage.setItem("users", updatedUsers)
-    setShowEditUserDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: "Usuario actualizado correctamente",
-      variant: "success",
-      duration: 2500,
-    })
+    if (!isValidEmail(selectedUser.email)) {
+      toast({ title: "Error", description: "El formato del correo electrónico no es válido", variant: "destructive", duration: 2500 });
+      return;
+    }
+    if (editPassword || editConfirmPassword) {
+      if (editPassword !== editConfirmPassword) {
+        toast({ title: "Error", description: "Las contraseñas no coinciden", variant: "destructive", duration: 2500 });
+        return;
+      }
+      if (editPassword.length < 4) {
+        toast({ title: "Error", description: "La contraseña debe tener al menos 4 caracteres", variant: "destructive", duration: 2500 });
+        return;
+      }
+    }
+    const body: any = {
+      name: selectedUser.name,
+      email: selectedUser.email,
+      permissions: selectedUser.permissions,
+    };
+    if (editPassword) body.password = editPassword;
+    try {
+      const res = await fetch(`/api/usuarios/${selectedUser.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = { error: "Error inesperado del servidor" };
+      }
+      if (res.ok) {
+        setShowEditUserDialog(false);
+        fetch("/api/usuarios").then(r => r.json()).then(setUsers);
+        toast({ title: "Éxito", description: "Usuario actualizado correctamente", variant: "success", duration: 2500 });
+      } else {
+        toast({ title: "Error", description: data.error || "No se pudo actualizar el usuario", variant: "destructive", duration: 2500 });
+      }
+    } catch (err) {
+      toast({ title: "Error", description: "Error de red o del servidor", variant: "destructive", duration: 2500 });
+    }
   }
 
   // Handle permissions update
-  const handleUpdatePermissions = () => {
+  const handleUpdatePermissions = async () => {
     if (!selectedUser) return
-
-    const updatedUsers = users.map((user) => (user.id === selectedUser.id ? selectedUser : user))
-
-    setUsers(updatedUsers)
-    storage.setItem("users", updatedUsers)
-    setShowPermissionsDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: "Permisos actualizados correctamente. Los cambios se aplicarán en el próximo inicio de sesión.",
-      variant: "success",
-      duration: 2500,
+    const res = await fetch(`/api/usuarios/${selectedUser.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: selectedUser.name,
+        email: selectedUser.email,
+        permissions: selectedUser.permissions,
+      }),
     })
+    const data = await res.json()
+    if (res.ok) {
+      setShowPermissionsDialog(false)
+      fetch("/api/usuarios").then(r => r.json()).then(setUsers)
+      toast({ title: "Éxito", description: "Permisos actualizados correctamente. Los cambios se aplicarán en el próximo inicio de sesión.", variant: "success", duration: 2500 })
+    } else {
+      toast({ title: "Error", description: data.error || "No se pudo actualizar permisos", variant: "destructive", duration: 2500 })
+    }
   }
 
-  // Handle delete user
-  const handleDeleteUser = (id: number) => {
-    // No permitir eliminar al usuario Emmanuel (id 1)
-    if (id === 1) {
-      toast({
-        title: "Error",
-        description: "No se puede eliminar al usuario administrador principal",
-        variant: "destructive",
-        duration: 2500,
-      })
+  // Nueva función para mostrar el modal de confirmación
+  const confirmDeleteUser = (user: User) => {
+    setUserToDelete(user)
+    setShowDeleteDialog(true)
+  }
+
+  // Modificar handleDeleteUser para no usar confirm()
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
+    if (userToDelete.id === 1) {
+      toast({ title: "Error", description: "No se puede eliminar al usuario administrador principal", variant: "destructive", duration: 2500 })
+      setShowDeleteDialog(false)
       return
     }
-
-    if (confirm("¿Está seguro de que desea eliminar este usuario?")) {
-      const updatedUsers = users.filter((user) => user.id !== id)
-      setUsers(updatedUsers)
-      storage.setItem("users", updatedUsers)
-
-      toast({
-        title: "Éxito",
-        description: "Usuario eliminado correctamente",
-        variant: "success",
-      })
+    const res = await fetch(`/api/usuarios/${userToDelete.id}`, { method: "DELETE" })
+    let data = {}
+    try {
+      data = await res.json()
+    } catch {
+      data = {}
     }
+    if (res.ok) {
+      fetch("/api/usuarios").then(r => r.json()).then(setUsers)
+      toast({ title: "Éxito", description: "Usuario eliminado correctamente", variant: "success" })
+    } else {
+      toast({ title: "Error", description: (data as any).error || "No se pudo eliminar el usuario", variant: "destructive", duration: 2500 })
+    }
+    setShowDeleteDialog(false)
+    setUserToDelete(null)
   }
+
+  // Al abrir el modal de edición, limpiar los campos de password
+  const openEditUserDialog = (user: User) => {
+    setSelectedUser(user);
+    setEditPassword("");
+    setEditConfirmPassword("");
+    setShowEditUserDialog(true);
+  };
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-full">
@@ -421,10 +391,7 @@ export default function UsuariosPage() {
                                 variant="outline"
                                 size="icon"
                                 title="Editar"
-                                onClick={() => {
-                                  setSelectedUser(user)
-                                  setShowEditUserDialog(true)
-                                }}
+                                onClick={() => openEditUserDialog(user)}
                               >
                                 <Edit className="h-4 w-4" />
                               </Button>
@@ -443,7 +410,7 @@ export default function UsuariosPage() {
                                 variant="outline"
                                 size="icon"
                                 title="Eliminar"
-                                onClick={() => handleDeleteUser(user.id)}
+                                onClick={() => confirmDeleteUser(user)}
                               >
                                 <Trash className="h-4 w-4" />
                               </Button>
@@ -591,6 +558,7 @@ export default function UsuariosPage() {
                     onChange={(e) => setSelectedUser({ ...selectedUser, name: e.target.value })}
                     className="col-span-1 md:col-span-3"
                     required
+                    disabled={selectedUser.id === 1}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
@@ -604,6 +572,7 @@ export default function UsuariosPage() {
                     onChange={(e) => setSelectedUser({ ...selectedUser, email: e.target.value })}
                     className="col-span-1 md:col-span-3"
                     required
+                    disabled={selectedUser.id === 1}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
@@ -632,6 +601,8 @@ export default function UsuariosPage() {
                     type="password"
                     placeholder="Dejar en blanco para no cambiar"
                     className="col-span-1 md:col-span-3"
+                    value={editPassword}
+                    onChange={e => setEditPassword(e.target.value)}
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-4 items-center gap-2 md:gap-4">
@@ -643,6 +614,8 @@ export default function UsuariosPage() {
                     type="password"
                     placeholder="Dejar en blanco para no cambiar"
                     className="col-span-1 md:col-span-3"
+                    value={editConfirmPassword}
+                    onChange={e => setEditConfirmPassword(e.target.value)}
                   />
                 </div>
               </div>
@@ -719,8 +692,8 @@ export default function UsuariosPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <Label>Radiografías</Label>
-                    <p className="text-sm text-muted-foreground">Acceso a las radiografías</p>
+                    <Label>Documentos médicos</Label>
+                    <p className="text-sm text-muted-foreground">Acceso a los documentos médicos</p>
                   </div>
                   <Switch
                     checked={selectedUser.permissions.radiografias}
@@ -832,6 +805,22 @@ export default function UsuariosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de confirmación para eliminar usuario */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar el usuario <b>{userToDelete?.name}</b>? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowDeleteDialog(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive text-white hover:bg-destructive/90">Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

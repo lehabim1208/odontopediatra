@@ -14,6 +14,8 @@ import { es } from "date-fns/locale"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Download } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { LoadingSpinner } from "@/components/loading-spinner"
 
 export default function OdontogramaPage() {
   const router = useRouter()
@@ -22,64 +24,132 @@ export default function OdontogramaPage() {
   const [patient, setPatient] = useState<any>(null)
   const [savedDates, setSavedDates] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState<string>("current")
-  const [defaultDentitionType, setDefaultDentitionType] = useState<"adult" | "child">("child") // Cambiado a "child" por defecto
-  const [isDefaultDentitionChanged, setIsDefaultDentitionChanged] = useState(false)
+  const [defaultDentitionType, setDefaultDentitionType] = useState<"adult" | "child">("child")
+  const [odontogramas, setOdontogramas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [odontogramaData, setOdontogramaData] = useState<any>(null)
+  const [notas, setNotas] = useState("")
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     if (!selectedPatientId) {
       router.push("/pacientes")
       return
     }
-
-    const patients = storage.getItem("patients") || []
-    const foundPatient = patients.find((p: any) => p.id.toString() === selectedPatientId)
-    if (foundPatient) {
-      setPatient(foundPatient)
-
-      // Cargar la preferencia de dentición para este paciente
-      const patientPreferences = storage.getItem(`patient-preferences-${selectedPatientId}`) || {}
-      if (patientPreferences.defaultDentitionType) {
-        setDefaultDentitionType(patientPreferences.defaultDentitionType)
-      } else {
-        // Si no hay preferencia guardada, usar "child" como predeterminado
-        setDefaultDentitionType("child")
-      }
-    }
-
-    // Cargar las fechas de odontogramas guardados
-    loadSavedDates()
+    setLoading(true)
+    // Consultar la API de pacientes
+    fetch(`/api/pacientes?id=${selectedPatientId}`)
+      .then(res => res.json())
+      .then((data) => {
+        setPatient(data)
+      })
+      .catch(() => setPatient(null))
+    // 1. Consultar solo el odontograma más reciente
+    fetch(`/api/odontograma?id_paciente=${selectedPatientId}&latest=1`)
+      .then(res => res.json())
+      .then((data) => {
+        setOdontogramas(data || [])
+        setLoading(false)
+      })
+      .catch(() => {
+        setOdontogramas([])
+        setLoading(false)
+      })
   }, [selectedPatientId, router])
 
-  const loadSavedDates = () => {
-    if (!selectedPatientId) return
-
-    // Buscar todas las entradas en localStorage que contengan odontogramas del paciente
-    const dates: string[] = []
-
-    // Buscar odontogramas de adultos
-    const adultOdontograms = storage.getItem(`odontogram-history-${selectedPatientId}-adult`) || []
-    if (Array.isArray(adultOdontograms)) {
-      adultOdontograms.forEach((item: any) => {
-        if (item.date && !dates.includes(item.date)) {
-          dates.push(item.date)
-        }
-      })
+  // Segunda consulta: historial completo, solo después de mostrar el más reciente
+  useEffect(() => {
+    if (!loading && odontogramas.length > 0) {
+      fetch(`/api/odontograma?id_paciente=${selectedPatientId}`)
+        .then(res => res.json())
+        .then((allData) => {
+          if (Array.isArray(allData) && allData.length > 0) {
+            setOdontogramas(allData)
+          }
+        })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, selectedPatientId])
 
-    // Buscar odontogramas pediátricos
-    const childOdontograms = storage.getItem(`odontogram-history-${selectedPatientId}-child`) || []
-    if (Array.isArray(childOdontograms)) {
-      childOdontograms.forEach((item: any) => {
-        if (item.date && !dates.includes(item.date)) {
-          dates.push(item.date)
-        }
-      })
+  useEffect(() => {
+    if (!odontogramas.length) {
+      setSavedDates([])
+      setOdontogramaData(null)
+      setNotas("")
+      return
     }
+    const fechas = odontogramas.map((o) => o.fecha_hora)
+    setSavedDates(fechas)
+    if (selectedDate === "current" || !fechas.includes(selectedDate)) {
+      const vector = odontogramas[0]?.json_vector
+      let parsedVector = null
+      if (vector) {
+        parsedVector = typeof vector === "string" ? JSON.parse(vector) : vector
+      }
+      setOdontogramaData(parsedVector)
+      setNotas(odontogramas[0]?.notas || "")
+    } else {
+      const od = odontogramas.find((o) => o.fecha_hora === selectedDate)
+      let parsedVector = null
+      if (od?.json_vector) {
+        parsedVector = typeof od.json_vector === "string" ? JSON.parse(od.json_vector) : od.json_vector
+      }
+      setOdontogramaData(parsedVector)
+      setNotas(od?.notas || "")
+    }
+  }, [odontogramas, selectedDate])
 
-    // Ordenar las fechas de más reciente a más antigua
-    dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+  useEffect(() => {
+    const handlePdfDone = () => setPdfLoading(false)
+    document.addEventListener("odontogram-pdf-done", handlePdfDone)
+    return () => document.removeEventListener("odontogram-pdf-done", handlePdfDone)
+  }, [])
 
-    setSavedDates(dates)
+  // Recargar odontogramas desde la base de datos
+  const reloadOdontogramas = () => {
+    setLoading(true)
+    fetch(`/api/odontograma?id_paciente=${selectedPatientId}`)
+      .then(res => res.json())
+      .then((data) => {
+        setOdontogramas(data || [])
+        setLoading(false)
+      })
+      .catch(() => {
+        setOdontogramas([])
+        setLoading(false)
+      })
+  }
+
+  // Handler para cuando se guarda el odontograma
+  const handleOdontogramaSave = () => {
+    reloadOdontogramas()
+    toast({
+      title: "Éxito",
+      description: "Odontograma guardado correctamente",
+      variant: "success",
+      duration: 2500,
+    })
+    setSelectedDate("current")
+  }
+
+  const handleDownloadPDF = () => {
+    if (!patient) return
+    setPdfLoading(true)
+    const event = new CustomEvent("download-odontogram-pdf", {
+      detail: {
+        patientName: patient.nombre || patient.name || "",
+        patientAge: patient.edad || patient.age || "",
+        tutor: patient.tutor || patient.tutor_nombre || "",
+        date: format(new Date(), "d 'de' MMMM, yyyy", { locale: es }),
+      },
+    })
+    document.dispatchEvent(event)
+  }
+
+  const handleDefaultDentitionChange = (checked: boolean) => {
+    const newDentitionType = checked ? "child" : "adult"
+    setDefaultDentitionType(newDentitionType)
+    // Aquí podrías guardar la preferencia en la BD si lo deseas
   }
 
   const formatDate = (dateString: string) => {
@@ -90,48 +160,13 @@ export default function OdontogramaPage() {
     }
   }
 
-  const handleDefaultDentitionChange = (checked: boolean) => {
-    const newDentitionType = checked ? "child" : "adult"
-    setDefaultDentitionType(newDentitionType)
-    setIsDefaultDentitionChanged(true)
-
-    // Guardar la preferencia para este paciente
-    const patientPreferences = storage.getItem(`patient-preferences-${selectedPatientId}`) || {}
-    storage.setItem(`patient-preferences-${selectedPatientId}`, {
-      ...patientPreferences,
-      defaultDentitionType: newDentitionType,
-    })
-
-    toast({
-      title: "Preferencia guardada",
-      description: `La dentición predeterminada para este paciente ahora es ${newDentitionType === "adult" ? "Adulto" : "Infantil"}`,
-      variant: "success",
-      duration: 2500,
-    })
-  }
-
-  const handleDownloadPDF = () => {
-    if (!patient) return
-
-    // Notificar al componente Odontograma que debe generar el PDF
-    const event = new CustomEvent("download-odontogram-pdf", {
-      detail: {
-        patientName: patient.name,
-        patientAge: patient.age,
-        date: format(new Date(), "d 'de' MMMM, yyyy", { locale: es }),
-      },
-    })
-    document.dispatchEvent(event)
-  }
 
   if (!selectedPatientId) {
     return (
       <div className="p-6 md:p-10">
         <div className="text-center py-8">
           <p>No se ha seleccionado ningún paciente</p>
-          <Button className="mt-4" onClick={() => router.push("/pacientes")}>
-            Volver a Pacientes
-          </Button>
+          <Button className="mt-4" onClick={() => router.push("/pacientes")}>Volver a Pacientes</Button>
         </div>
       </div>
     )
@@ -142,14 +177,18 @@ export default function OdontogramaPage() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-primary brand-name">Odontograma Digital</h1>
-          {patient && <p className="text-muted-foreground">Paciente: {patient.name}</p>}
+          {/* Mostrar el nombre, edad y tutor del paciente si están disponibles */}
+          {(patient?.nombre || patient?.name || patient?.edad || patient?.age || patient?.tutor || patient?.tutor_nombre || patient?.guardian) && (
+            <div className="mb-2 font-bold text-blue-600">
+              {(patient?.nombre || patient?.name) && <span>Paciente: {patient?.nombre || patient?.name} </span>}
+              {(patient?.edad || patient?.age) && <span>| Edad: {patient?.edad || patient?.age} </span>}
+            </div>
+          )}
         </div>
-
-        <Button onClick={handleDownloadPDF} className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700" variant="default">
-          <Download className="h-4 w-4" /> Descargar PDF
+        <Button onClick={handleDownloadPDF} className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700" variant="default" disabled={pdfLoading}>
+          {pdfLoading ? <LoadingSpinner size="sm" /> : <Download className="h-4 w-4" />} Descargar PDF
         </Button>
       </div>
-
       <div className="grid gap-6 grid-cols-1">
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -167,7 +206,6 @@ export default function OdontogramaPage() {
                   <span>Infantil</span>
                 </div>
               </div>
-
               <Select value={selectedDate} onValueChange={setSelectedDate}>
                 <SelectTrigger className="w-[240px]">
                   <SelectValue placeholder="Seleccionar fecha" />
@@ -184,12 +222,20 @@ export default function OdontogramaPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {selectedPatientId ? (
+            {loading ? (
+              <Skeleton className="h-40 w-full" />
+            ) : selectedPatientId ? (
               <Odontograma
                 patientId={selectedPatientId}
+                patientName={patient?.nombre || patient?.name || ""}
+                patientAge={patient?.edad || patient?.age || ""}
+                tutor={patient?.tutor || patient?.tutor_nombre || ""}
                 readOnly={selectedDate !== "current"}
                 historicalDate={selectedDate !== "current" ? selectedDate : undefined}
                 defaultDentitionType={defaultDentitionType}
+                value={odontogramaData}
+                notas={notas}
+                onSave={handleOdontogramaSave}
               />
             ) : (
               <div className="text-center py-8">

@@ -20,114 +20,133 @@ export default function ConfiguracionPage() {
   const { toast } = useToast()
   const isMobile = useMediaQuery("(max-width: 768px)")
 
-  // Clinic information state
+  // Consultorio
+  const [clinicId, setClinicId] = useState<number | null>(null)
   const [clinicName, setClinicName] = useState("")
   const [clinicAddress, setClinicAddress] = useState("")
-  const [clinicPhone, setClinicPhone] = useState("")
   const [clinicEmail, setClinicEmail] = useState("")
+  const [clinicLogo, setClinicLogo] = useState<string | null>(null)
+  const [clinicLogoFile, setClinicLogoFile] = useState<File | null>(null)
+  const [clinicLoading, setClinicLoading] = useState(false)
 
-  // User profile state
-  const [userName, setUserName] = useState(userRole === "doctor" ? "Dr. Emmanuel" : "Srita. Marcela")
+  // Perfil
+  const [userId, setUserId] = useState<number | null>(null)
+  const [userName, setUserName] = useState("")
+  const [userUsername, setUserUsername] = useState("")
   const [userEmail, setUserEmail] = useState("")
-  const [userPhone, setUserPhone] = useState("")
+  const [userPassword, setUserPassword] = useState("")
+  const [userConfirmPassword, setUserConfirmPassword] = useState("")
+  const [userLoading, setUserLoading] = useState(false)
 
-  // Notification settings
-  const [emailNotifications, setEmailNotifications] = useState(true)
-  const [smsNotifications, setSmsNotifications] = useState(false)
-  const [reminderTime, setReminderTime] = useState("24")
-
+  // Permiso para editar consultorio
   const [canEditClinic, setCanEditClinic] = useState(false)
 
-  // Ensure clinic information is visible to all users
+  // Cargar datos de consultorio y usuario al montar
   useEffect(() => {
-    // Verificar si el usuario tiene permiso para editar la información del consultorio
-    const users = storage.getItem("users") || []
-    const currentUser = users.find((u: any) => u.role === userRole)
-
-    // Verificar si el usuario tiene el permiso específico para editar la información del consultorio
-    setCanEditClinic(currentUser && currentUser.permissions && currentUser.permissions.clinic)
-
-    // Cargar información del usuario desde localStorage
-    const userConfig = storage.getItem("userConfig")
-    if (userConfig) {
-      setUserName(userConfig.userName || userName)
-      setUserEmail(userConfig.userEmail || "")
-      setUserPhone(userConfig.userPhone || "")
-    }
-
-    // Cargar información del consultorio desde localStorage o usar valores predeterminados
-    const clinicConfig = storage.getItem("clinicConfig")
-    if (clinicConfig) {
-      setClinicName(clinicConfig.clinicName || "Odontopediatra Emmanuel Severino")
-      setClinicAddress(clinicConfig.clinicAddress || "Calle paseo del 17 de octubre #12. Colonia sahop")
-      setClinicPhone(clinicConfig.clinicPhone || "+52 228 243 3062")
-      setClinicEmail(clinicConfig.clinicEmail || "dremmanuel@gmail.com")
-    } else {
-      // Valores predeterminados si no hay configuración guardada
-      setClinicName("Odontopediatra Emmanuel Severino")
-      setClinicAddress("Calle paseo del 17 de octubre #12. Colonia sahop")
-      setClinicPhone("+52 228 243 3062")
-      setClinicEmail("dremmanuel@gmail.com")
-
-      // Guardar los valores predeterminados en el almacenamiento
-      storage.setItem("clinicConfig", {
-        clinicName: "Odontopediatra Emmanuel Severino",
-        clinicAddress: "Calle paseo del 17 de octubre #12. Colonia sahop",
-        clinicPhone: "+52 228 243 3062",
-        clinicEmail: "dremmanuel@gmail.com",
+    // Consultorio
+    setClinicLoading(true)
+    fetch("/api/consultorio")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.id) {
+          setClinicId(data.id)
+          setClinicName(data.nombre || "")
+          setClinicAddress(data.direccion || "")
+          setClinicEmail(data.correo || "")
+          setClinicLogo(data.logo_ruta || null)
+        }
       })
-    }
+      .finally(() => setClinicLoading(false))
 
-    const notificationConfig = storage.getItem("notificationConfig")
-    if (notificationConfig) {
-      setEmailNotifications(
-        notificationConfig.emailNotifications !== undefined
-          ? notificationConfig.emailNotifications
-          : emailNotifications,
-      )
-      setSmsNotifications(
-        notificationConfig.smsNotifications !== undefined ? notificationConfig.smsNotifications : smsNotifications,
-      )
-      setReminderTime(notificationConfig.reminderTime || reminderTime)
+    // Usuario actual
+    let userIdFromStorage = null
+    if (typeof window !== "undefined") {
+      const currentUser = window.localStorage.getItem("currentUser")
+      if (currentUser) {
+        try {
+          userIdFromStorage = JSON.parse(currentUser).id
+        } catch (e) {
+          console.error("Error parseando currentUser:", e)
+        }
+      }
     }
-  }, [userRole, userName])
-
-  // Save settings
-  const saveSettings = (section: string) => {
-    switch (section) {
-      case "consultorio":
-        const clinicConfig = {
-          clinicName,
-          clinicAddress,
-          clinicPhone,
-          clinicEmail,
-        }
-        storage.setItem("clinicConfig", clinicConfig)
-        break
-      case "perfil":
-        const userConfig = {
-          userName,
-          userEmail,
-          userPhone,
-        }
-        storage.setItem("userConfig", userConfig)
-        break
-      case "notificaciones":
-        const notificationConfig = {
-          emailNotifications,
-          smsNotifications,
-          reminderTime,
-        }
-        storage.setItem("notificationConfig", notificationConfig)
-        break
+    if (userIdFromStorage) {
+      setUserId(userIdFromStorage)
+      setUserLoading(true)
+      console.log('Buscando usuario con id:', userIdFromStorage)
+      fetch(`/api/usuarios/${userIdFromStorage}`)
+        .then(res => {
+          console.log('Respuesta cruda:', res)
+          return res.json()
+        })
+        .then(data => {
+          console.log('Respuesta backend usuario:', data)
+          setUserName(typeof data.name === 'string' ? data.name : "")
+          setUserUsername(typeof data.username === 'string' ? data.username : "")
+          setUserEmail(typeof data.email === 'string' ? data.email : "")
+        })
+        .catch(err => {
+          console.error('Error al hacer fetch del usuario:', err)
+        })
+        .finally(() => setUserLoading(false))
+    } else {
+      console.error('No se encontró el id de usuario en localStorage')
     }
+    // Permiso para editar consultorio
+    const users = storage.getItem("users") || []
+    const current = users.find((u: any) => u.role === userRole)
+    setCanEditClinic(current && current.permissions && current.permissions.clinic)
+  }, [userRole])
 
-    toast({
-      title: "Configuración guardada",
-      description: `La configuración de ${section} se ha guardado correctamente.`,
-      variant: "success",
-      duration: 3000,
+  // Guardar consultorio
+  const saveClinic = async () => {
+    setClinicLoading(true)
+    let logo_ruta = clinicLogo
+    // Si hay archivo nuevo, deberías subirlo a tu backend y obtener la ruta
+    // Aquí solo se simula el guardado de la ruta
+    // TODO: Implementar subida real de archivos si lo necesitas
+    const res = await fetch("/api/consultorio", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nombre: clinicName,
+        correo: clinicEmail,
+        direccion: clinicAddress,
+        logo_ruta: logo_ruta,
+      }),
     })
+    if (res.ok) {
+      toast({ title: "Configuración guardada", description: "La información del consultorio se ha guardado correctamente.", variant: "success" })
+    } else {
+      toast({ title: "Error", description: "No se pudo guardar la información del consultorio", variant: "destructive" })
+    }
+    setClinicLoading(false)
+  }
+
+  // Guardar perfil
+  const saveProfile = async () => {
+    if (!userId) return
+    if (userPassword && userPassword !== userConfirmPassword) {
+      toast({ title: "Error", description: "Las contraseñas no coinciden", variant: "destructive" })
+      return
+    }
+    setUserLoading(true)
+    const body: any = { name: userName, username: userUsername, email: userEmail }
+    if (userPassword) body.password = userPassword
+    if (userId === 1) body.allowAdminEdit = true
+    const res = await fetch(`/api/usuarios/${userId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      toast({ title: "Perfil actualizado", description: "Tu información se ha guardado correctamente.", variant: "success" })
+      setUserPassword("")
+      setUserConfirmPassword("")
+    } else {
+      toast({ title: "Error", description: "No se pudo guardar tu información", variant: "destructive" })
+    }
+    setUserLoading(false)
   }
 
   return (
@@ -149,13 +168,6 @@ export default function ConfiguracionPage() {
             <User className="h-4 w-4" />
             <span className="hidden sm:inline">Perfil</span>
           </TabsTrigger>
-          {hasPermission("notifications") && (
-            <TabsTrigger value="notifications" className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              <span className="hidden sm:inline">Notificaciones</span>
-            </TabsTrigger>
-          )}
-          {/* Ocultar la pestaña "Acerca de" en dispositivos móviles */}
           {!isMobile && (
             <TabsTrigger value="acerca-de" className="flex items-center gap-2">
               <Info className="h-4 w-4" />
@@ -171,7 +183,7 @@ export default function ConfiguracionPage() {
                 <CardDescription>Actualiza la información de tu consultorio dental</CardDescription>
               </CardHeader>
               <CardContent>
-                <form className="space-y-6">
+                <form className="space-y-6" onSubmit={e => { e.preventDefault(); saveClinic(); }}>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="clinicName">Nombre del Consultorio</Label>
@@ -179,37 +191,22 @@ export default function ConfiguracionPage() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="clinicEmail">Correo Electrónico</Label>
-                      <Input
-                        id="clinicEmail"
-                        type="email"
-                        value={clinicEmail}
-                        onChange={(e) => setClinicEmail(e.target.value)}
-                      />
+                      <Input id="clinicEmail" type="email" value={clinicEmail} onChange={(e) => setClinicEmail(e.target.value)} />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="clinicAddress">Dirección</Label>
-                    <Textarea
-                      id="clinicAddress"
-                      value={clinicAddress}
-                      onChange={(e) => setClinicAddress(e.target.value)}
-                    />
+                    <Textarea id="clinicAddress" value={clinicAddress} onChange={(e) => setClinicAddress(e.target.value)} />
                   </div>
-
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="clinicPhone">Teléfono</Label>
-                      <Input id="clinicPhone" value={clinicPhone} onChange={(e) => setClinicPhone(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
                       <Label htmlFor="clinicLogo">Logo del Consultorio</Label>
-                      <Input id="clinicLogo" type="file" />
+                      <Input id="clinicLogo" type="file" disabled />
+                      {clinicLogo && <img src={clinicLogo} alt="Logo" className="h-16 mt-2" />}
                     </div>
                   </div>
-
-                  <Button type="button" onClick={() => saveSettings("consultorio")}>
-                    <Save className="mr-2 h-4 w-4" /> Guardar Cambios
+                  <Button type="submit" disabled={clinicLoading}>
+                    <Save className="mr-2 h-4 w-4" /> {clinicLoading ? "Guardando..." : "Guardar Cambios"}
                   </Button>
                 </form>
               </CardContent>
@@ -222,18 +219,10 @@ export default function ConfiguracionPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p>
-                    <strong>Nombre:</strong> {clinicName}
-                  </p>
-                  <p>
-                    <strong>Dirección:</strong> {clinicAddress}
-                  </p>
-                  <p>
-                    <strong>Teléfono:</strong> {clinicPhone}
-                  </p>
-                  <p>
-                    <strong>Email:</strong> {clinicEmail}
-                  </p>
+                  <p><strong>Nombre:</strong> {clinicName}</p>
+                  <p><strong>Dirección:</strong> {clinicAddress}</p>
+                  <p><strong>Email:</strong> {clinicEmail}</p>
+                  {clinicLogo && <img src={clinicLogo} alt="Logo" className="h-16 mt-2" />}
                 </div>
               </CardContent>
             </Card>
@@ -246,110 +235,33 @@ export default function ConfiguracionPage() {
               <CardDescription>Actualiza tu información personal</CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="space-y-6">
+              <form className="space-y-6" onSubmit={e => { e.preventDefault(); saveProfile(); }}>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="userName">Nombre Completo</Label>
                     <Input id="userName" value={userName} onChange={(e) => setUserName(e.target.value)} />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="userUsername">Usuario</Label>
+                    <Input id="userUsername" value={userUsername} onChange={(e) => setUserUsername(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="userEmail">Correo Electrónico</Label>
-                    <Input
-                      id="userEmail"
-                      type="email"
-                      value={userEmail}
-                      onChange={(e) => setUserEmail(e.target.value)}
-                    />
+                    <Input id="userEmail" type="email" value={userEmail} onChange={(e) => setUserEmail(e.target.value)} />
                   </div>
                 </div>
-
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="userPhone">Teléfono</Label>
-                    <Input id="userPhone" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} />
+                    <Label htmlFor="userPassword">Nueva Contraseña</Label>
+                    <Input id="userPassword" type="password" value={userPassword} onChange={(e) => setUserPassword(e.target.value)} placeholder="Dejar en blanco para no cambiar" />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="userPhoto">Foto de Perfil</Label>
-                    <Input id="userPhoto" type="file" />
+                    <Label htmlFor="userConfirmPassword">Confirmar Contraseña</Label>
+                    <Input id="userConfirmPassword" type="password" value={userConfirmPassword} onChange={(e) => setUserConfirmPassword(e.target.value)} placeholder="Dejar en blanco para no cambiar" />
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="currentPassword">Contraseña Actual</Label>
-                  <Input id="currentPassword" type="password" />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">Nueva Contraseña</Label>
-                    <Input id="newPassword" type="password" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
-                    <Input id="confirmPassword" type="password" />
-                  </div>
-                </div>
-
-                <Button type="button" onClick={() => saveSettings("perfil")}>
-                  <Save className="mr-2 h-4 w-4" /> Guardar Cambios
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="notifications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuración de Notificaciones</CardTitle>
-              <CardDescription>Personaliza cómo y cuándo recibes notificaciones</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="emailNotifications">Notificaciones por Email</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Recibe recordatorios de citas por correo electrónico
-                      </p>
-                    </div>
-                    <Switch
-                      id="emailNotifications"
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="smsNotifications">Notificaciones por SMS</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Recibe recordatorios de citas por mensaje de texto
-                      </p>
-                    </div>
-                    <Switch id="smsNotifications" checked={smsNotifications} onCheckedChange={setSmsNotifications} />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="reminderTime">Tiempo de Recordatorio</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Select value={reminderTime} onValueChange={setReminderTime}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar tiempo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 hora antes</SelectItem>
-                        <SelectItem value="2">2 horas antes</SelectItem>
-                        <SelectItem value="24">24 horas antes</SelectItem>
-                        <SelectItem value="48">48 horas antes</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Button type="button" onClick={() => saveSettings("notificaciones")}>
-                  <Save className="mr-2 h-4 w-4" /> Guardar Cambios
+                <Button type="submit" disabled={userLoading}>
+                  <Save className="mr-2 h-4 w-4" /> {userLoading ? "Guardando..." : "Guardar Cambios"}
                 </Button>
               </form>
             </CardContent>

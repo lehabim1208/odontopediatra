@@ -40,6 +40,10 @@ export function Sidebar({ onExpandChange }: { onExpandChange?: (expanded: boolea
 
   const { setIsLoggedIn, userRole, isDarkMode, toggleDarkMode, hasPermission } = useAuth()
 
+  // Log temporal para depuración de permisos
+  useEffect(() => {   
+  }, [userRole, hasPermission])
+
   // Load sidebar state from cookie on mount
   useEffect(() => {
     const cookieValue = document.cookie
@@ -85,6 +89,8 @@ export function Sidebar({ onExpandChange }: { onExpandChange?: (expanded: boolea
     storage.removeItem("isLoggedIn");
     storage.removeItem("userRole");
     setIsLoggedIn(false);
+    // Eliminar cookie para el middleware
+    document.cookie = "isLoggedIn=; path=/; max-age=0";
     window.location.href = "/login";
   }
 
@@ -99,25 +105,25 @@ export function Sidebar({ onExpandChange }: { onExpandChange?: (expanded: boolea
       title: "Pacientes",
       icon: Users,
       href: "/pacientes",
-      permission: hasPermission("pacientes"), // Verificar permiso específico
+      permission: hasPermission("pacientes"),
     },
     {
       title: "Citas",
       icon: CalendarDays,
       href: "/citas",
-      permission: hasPermission("citas"), // Verificar permiso específico
+      permission: hasPermission("citas"),
     },
     {
       title: "Usuarios",
       icon: UserCog,
       href: "/usuarios",
-      permission: hasPermission("usuarios"), // Verificar permiso específico
+      permission: hasPermission("usuarios"),
     },
     {
       title: "Configuración",
       icon: Settings,
       href: "/configuracion",
-      permission: hasPermission("configuracion"), // Verificar permiso específico
+      permission: hasPermission("configuracion"),
     },
   ]
 

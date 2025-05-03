@@ -12,7 +12,7 @@ import { es } from "date-fns/locale"
 
 export default function Home() {
   const router = useRouter()
-  const { userRole } = useAuth()
+  const { userRole, hasPermission } = useAuth()
   const [stats, setStats] = useState({
     totalAppointments: 0,
     newPatients: 0,
@@ -207,6 +207,7 @@ export default function Home() {
       </div>
 
       <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-3">
+      {hasPermission("citas") && (
         <Card className="col-span-1 md:col-span-2">
           <CardHeader className="flex flex-col md:flex-row items-start md:items-center justify-between pb-2">
             <div>
@@ -304,7 +305,8 @@ export default function Home() {
             </div>
           </CardContent>
         </Card>
-
+      )}
+      {(hasPermission("citas") || hasPermission("pacientes")) && (
         <Card className="col-span-1">
           <CardHeader>
             <CardTitle>Acciones Rápidas</CardTitle>
@@ -312,25 +314,30 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 gap-4">
-              <Button
-                variant="outline"
-                className="h-24 flex flex-col items-center justify-center"
-                onClick={() => router.push("/pacientes")}
-              >
-                <Users className="h-6 w-6 mb-2" />
-                <span>Nuevo Paciente</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex flex-col items-center justify-center"
-                onClick={() => router.push("/citas")}
-              >
-                <Plus className="h-6 w-6 mb-2" />
-                <span>Nueva Cita</span>
-              </Button>
+              {hasPermission("pacientes") && (
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                  onClick={() => router.push("/pacientes")}
+                >
+                  <Users className="h-6 w-6 mb-2" />
+                  <span>Nuevo Paciente</span>
+                </Button>
+              )}
+              {hasPermission("citas") && (
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                  onClick={() => router.push("/citas")}
+                >
+                  <Plus className="h-6 w-6 mb-2" />
+                  <span>Nueva Cita</span>
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
+      )}
       </div>
 
       <div className="grid gap-4 md:gap-6 mt-4 md:mt-6 grid-cols-1 md:grid-cols-2">

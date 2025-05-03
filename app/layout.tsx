@@ -17,18 +17,14 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
-          <AuthProvider>
-            <PatientProvider>
-              <SessionGuard>
-                {children}
-              </SessionGuard>
-            </PatientProvider>
-          </AuthProvider>
-          <Toaster />
-        </ThemeProvider>
+    <html lang="es">
+      <body>
+        <AuthProvider>
+          <PatientProvider>
+            {children}
+          </PatientProvider>
+        </AuthProvider>
+        <Toaster />
       </body>
     </html>
   )

@@ -51,6 +51,9 @@ export async function handleLogin(formData: FormData) {
     // Establecer como doctor
     storage.setItem("isLoggedIn", true)
     storage.setItem("userRole", "doctor")
+    storage.setItem("currentUserId", 1)
+    // eslint-disable-next-line no-console
+    console.log("[handleLogin] Guardando currentUserId: 1")
     storage.setItem("currentUser", {
       id: 1,
       name: "Emmanuel",
@@ -62,6 +65,9 @@ export async function handleLogin(formData: FormData) {
     // Establecer como secretaria
     storage.setItem("isLoggedIn", true)
     storage.setItem("userRole", "secretary")
+    storage.setItem("currentUserId", 2)
+    // eslint-disable-next-line no-console
+    console.log("[handleLogin] Guardando currentUserId: 2")
     storage.setItem("currentUser", {
       id: 2,
       name: "Marcela",

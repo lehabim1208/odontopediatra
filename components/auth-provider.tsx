@@ -29,42 +29,60 @@ export const useAuth = () => {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [userId, setUserId] = useState<number | null>(null)
+  const [userPermissions, setUserPermissions] = useState<any>({})
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
-  // Fix the permission check for configuration page
+  // Obtener permisos actualizados desde la API
+  const fetchUserPermissions = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/usuarios/${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        // Log temporal para depuración
+        // eslint-disable-next-line no-console
+        console.log("[AuthProvider] fetchUserPermissions id:", id)
+        // eslint-disable-next-line no-console
+        console.log("[AuthProvider] respuesta API /api/usuarios/[id]:", data)
+        setUserPermissions(data.permissions || {})
+        setUserRole(data.role)
+        setUserId(data.id)
+      } else {
+        // eslint-disable-next-line no-console
+        console.log("[AuthProvider] Error en fetch /api/usuarios/" + id, res.status)
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.log("[AuthProvider] Error en fetchUserPermissions", e)
+    }
+  }, [])
+
+  // Al iniciar sesión o cambiar usuario, obtener permisos desde la API
+  useEffect(() => {
+    const isAuthenticated = storage.getItem("isLoggedIn")
+    const storedUserRole = storage.getItem("userRole")
+    const storedUserId = storage.getItem("currentUserId")
+    setIsLoggedIn(!!isAuthenticated)
+    setUserRole(storedUserRole)
+    setUserId(storedUserId ? Number(storedUserId) : null)
+  
+    if (isAuthenticated && storedUserId) {
+      fetchUserPermissions(Number(storedUserId))
+    }
+  }, [fetchUserPermissions])
+
+  // hasPermission revisa los permisos actuales
   const hasPermission = useCallback(
     (resource: string) => {
-      // Si no está autenticado, no tiene permisos
       if (!isLoggedIn) return false
-
-      // Obtener usuarios del almacenamiento
-      const users = storage.getItem("users") || []
-      const storedUserRole = storage.getItem("userRole")
-
-      // Buscar el usuario actual por su rol
-      const currentUser = users.find((user: any) => user.role === storedUserRole)
-
-      // Si encontramos el usuario y tiene permisos definidos
-      if (currentUser && currentUser.permissions) {
-        return !!currentUser.permissions[resource]
-      }
-
-      // Si es doctor y no encontramos permisos específicos, tiene acceso a todo por defecto
-      if (storedUserRole === "doctor") return true
-
-      // Permisos por defecto para secretaria
-      if (storedUserRole === "secretary") {
-        const allowedResources = ["pacientes", "citas"]
-        return allowedResources.includes(resource)
-      }
-
-      return false
+      if (userRole === "doctor") return true
+      return !!userPermissions[resource]
     },
-    [isLoggedIn],
+    [isLoggedIn, userRole, userPermissions]
   )
 
   // Inicializar usuarios por defecto si no existen
@@ -112,16 +130,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkAuth = () => {
-      // Inicializar usuarios por defecto
+      // Inicializar usuarios por defecto SOLO si no existen (solo para desarrollo/local, no para permisos)
       initializeDefaultUsers()
 
       const isAuthenticated = storage.getItem("isLoggedIn")
       const storedUserRole = storage.getItem("userRole")
+      const storedUserId = storage.getItem("currentUserId")
       const darkMode = storage.getItem("darkMode")
 
       setIsLoggedIn(!!isAuthenticated)
       setUserRole(storedUserRole)
       setIsDarkMode(!!darkMode)
+      setUserId(storedUserId ? Number(storedUserId) : null)
 
       if (!!darkMode) {
         document.documentElement.classList.add("dark")
@@ -131,21 +151,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!isAuthenticated && pathname !== "/login") {
         router.push("/login")
-      } else if (isAuthenticated && storedUserRole) {
-        // Verificar permisos para la página actual
+      } else if (isAuthenticated && storedUserRole && storedUserId) {
+        // Verificar permisos para la página actual usando userPermissions del estado
         const pathSegments = pathname.split("/").filter(Boolean)
         const currentPage = pathSegments.length > 0 ? pathSegments[0] : ""
 
-        // Obtener usuarios del almacenamiento
-        const users = storage.getItem("users") || []
-        const currentUser = users.find((user: any) => user.role === storedUserRole)
-
-        // Verificar si el usuario tiene permiso para acceder a la página actual
-        if (currentPage && currentPage !== "login" && currentUser && currentUser.permissions) {
+        // Usar los permisos del estado (obtenidos de la API)
+        if (currentPage && currentPage !== "login" && userPermissions) {
           const hasAccess =
             currentPage === "configuracion"
-              ? currentUser.permissions.configuracion
-              : currentUser.permissions[currentPage] || false
+              ? userPermissions.configuracion
+              : userPermissions[currentPage] || false
 
           if (!hasAccess && currentPage !== "") {
             router.push("/")
@@ -155,7 +171,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     checkAuth()
-  }, [pathname, router])
+    // Solo depende de pathname, router, userPermissions
+  }, [pathname, router, userPermissions])
 
   const toggleDarkMode = () => {
     setIsDarkMode((prev) => {
@@ -176,61 +193,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleStart = () => setIsLoading(true)
     const handleComplete = () => {
-      // Aseguramos que la página realmente ha cargado antes de quitar el preloader
       setTimeout(() => setIsLoading(false), 1000)
     }
 
-    // Create custom event for route changes
-    const startEvent = new Event("next-route-change-start")
-    const completeEvent = new Event("next-route-change-complete")
-
-    // Simulate route change events for Next.js
-    router.events = {
-      on: (event: string, callback: () => void) => {
-        if (event === "routeChangeStart") document.addEventListener("next-route-change-start", callback)
-        if (event === "routeChangeComplete") document.addEventListener("next-route-change-complete", callback)
-      },
-      off: (event: string, callback: () => void) => {
-        if (event === "routeChangeStart") document.removeEventListener("next-route-change-start", callback)
-        if (event === "routeChangeComplete") document.removeEventListener("next-route-change-complete", callback)
-      },
-      emit: (event: string) => {
-        if (event === "routeChangeStart") document.dispatchEvent(startEvent)
-        if (event === "routeChangeComplete") document.dispatchEvent(completeEvent)
-      },
-    }
-
-    router.events.on("routeChangeStart", handleStart)
-    router.events.on("routeChangeComplete", handleComplete)
-
-    // Patch the router.push method to emit events
-    const originalPush = router.push
-    router.push = function (...args: any[]) {
-      router.events.emit("routeChangeStart")
-      const result = originalPush.apply(this, args)
-
-      // Emitir el evento de completado solo cuando la navegación realmente ha terminado
-      window.addEventListener(
-        "load",
-        () => {
-          router.events.emit("routeChangeComplete")
-        },
-        { once: true },
-      )
-
-      // Fallback por si el evento load no se dispara
-      setTimeout(() => {
-        router.events.emit("routeChangeComplete")
-      }, 1000)
-
-      return result
-    }
+    // Si ya tienes eventos personalizados, los puedes mantener, pero no uses router.events ni parchees router.push
+    document.addEventListener("next-route-change-start", handleStart)
+    document.addEventListener("next-route-change-complete", handleComplete)
 
     return () => {
-      router.events.off("routeChangeStart", handleStart)
-      router.events.off("routeChangeComplete", handleComplete)
+      document.removeEventListener("next-route-change-start", handleStart)
+      document.removeEventListener("next-route-change-complete", handleComplete)
     }
-  }, [router])
+  }, [])
 
   return (
     <AuthContext.Provider value={{ isLoggedIn, setIsLoggedIn, userRole, isDarkMode, toggleDarkMode, hasPermission }}>

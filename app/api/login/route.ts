@@ -5,10 +5,10 @@ import bcrypt from "bcryptjs";
 export async function POST(req: Request) {
   const { username, password, role } = await req.json();
 
-  // Buscar usuario por usuario y rol
+  // Buscar usuario solo por usuario (sin filtrar por rol)
   const [rows]: any = await db.query(
-    "SELECT * FROM usuarios WHERE usuario = ? AND rol = ? LIMIT 1",
-    [username, role]
+    "SELECT * FROM usuarios WHERE usuario = ? LIMIT 1",
+    [username]
   );
   const user = rows[0];
 
@@ -20,6 +20,14 @@ export async function POST(req: Request) {
   const isValid = await bcrypt.compare(password, user.password);
   if (!isValid) {
     return new Response(JSON.stringify({ error: "Usuario o contraseña incorrectos" }), { status: 401 });
+  }
+
+  // Validar rol
+  if (user.rol !== role) {
+    return new Response(
+      JSON.stringify({ error: "Rol incorrecto. Cambie de sección", correctRole: user.rol }),
+      { status: 403 }
+    );
   }
 
   // Puedes devolver más datos si lo necesitas

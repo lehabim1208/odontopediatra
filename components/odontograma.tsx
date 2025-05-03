@@ -25,9 +25,15 @@ import { jsPDF } from "jspdf"
 
 interface OdontogramaProps {
   patientId: string
+  patientName?: string
+  patientAge?: string | number
+  tutor?: string
   readOnly?: boolean
   historicalDate?: string
   defaultDentitionType?: "adult" | "child"
+  value?: any
+  notas?: string
+  onSave?: (json_vector: any, notasValue?: string, historial_cambios?: any[]) => void
 }
 
 type Tooth = {
@@ -62,9 +68,15 @@ type HistoryAction = {
 
 export function Odontograma({
   patientId,
+  patientName,
+  patientAge,
+  tutor,
   readOnly = false,
   historicalDate,
   defaultDentitionType = "adult",
+  value,
+  notas: notasProp,
+  onSave,
 }: OdontogramaProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvas2Ref = useRef<HTMLCanvasElement>(null)
@@ -108,13 +120,29 @@ export function Odontograma({
 
   // Inicializar los dientes
   useEffect(() => {
-    initializeTeeth()
-    if (historicalDate) {
-      loadHistoricalOdontogram(historicalDate)
-    } else {
-      loadOdontogramData()
+    // Solo inicializar/cargar si NO se está mostrando un vector histórico
+    if (!value) {
+      initializeTeeth()
+      if (historicalDate) {
+        loadHistoricalOdontogram(historicalDate)
+      } else {
+        loadOdontogramData()
+      }
     }
-  }, [patientId, dentitionType, historicalDate])
+  }, [patientId, dentitionType, historicalDate, value])
+
+  // Sincronizar el estado interno con la prop value (usado para cargar odontogramas históricos)
+  useEffect(() => {
+    if (value && typeof value === "object") {
+      if (value.teeth) setTeeth(value.teeth)
+      if (value.bridges) setBridges(value.bridges)
+      if (value.notes !== undefined) setNotes(value.notes)
+      setSavedState(true)
+      // Reiniciar historial al cargar un vector externo
+      setHistory([])
+      setHistoryIndex(-1)
+    }
+  }, [value])
 
   // Escuchar el evento para generar el PDF
   useEffect(() => {
@@ -187,10 +215,8 @@ export function Odontograma({
     }
   }
 
-  const saveOdontogramData = () => {
+  const saveOdontogramData = async () => {
     const currentDate = new Date().toISOString()
-
-    // Guardar el odontograma actual
     const odontogramData = {
       teeth,
       bridges,
@@ -198,31 +224,45 @@ export function Odontograma({
       lastUpdated: currentDate,
     }
 
-    storage.setItem(`odontogram-${patientId}-${dentitionType}`, odontogramData)
-
-    // Guardar en el historial
-    const historyData = storage.getItem(`odontogram-history-${patientId}-${dentitionType}`) || []
-
-    const newHistoryEntry = {
-      ...odontogramData,
-      date: currentDate,
+    // Guardar en la base de datos vía API
+    try {
+      const response = await fetch("/api/odontograma", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id_paciente: patientId,
+          fecha_hora: currentDate,
+          notas: notes,
+          json_vector: odontogramData,
+          historial_cambios: history,
+        }),
+      })
+      const result = await response.json()
+      if (result.success) {
+        setSavedState(true)
+        toast({
+          title: "Éxito",
+          description: "Odontograma guardado en la base de datos",
+          variant: "success",
+          duration: 2500,
+        })
+        if (onSave) onSave(odontogramData, notes, history)
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "No se pudo guardar el odontograma",
+          variant: "destructive",
+          duration: 2500,
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo guardar el odontograma",
+        variant: "destructive",
+        duration: 2500,
+      })
     }
-
-    if (Array.isArray(historyData)) {
-      historyData.push(newHistoryEntry)
-      storage.setItem(`odontogram-history-${patientId}-${dentitionType}`, historyData)
-    } else {
-      storage.setItem(`odontogram-history-${patientId}-${dentitionType}`, [newHistoryEntry])
-    }
-
-    setSavedState(true)
-
-    toast({
-      title: "Éxito",
-      description: "Odontograma guardado correctamente",
-      variant: "success",
-      duration: 2500,
-    })
   }
 
   useEffect(() => {
@@ -1262,6 +1302,9 @@ export function Odontograma({
     pdf.text(`Edad: ${patientAge} años`, 15, infoY + 7)
     pdf.text(`Fecha: ${date} ${new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`, 15, infoY + 14)
     pdf.text(`Tipo de dentición: ${dentitionType === "adult" ? "Adulto" : "Infantil"}`, 15, infoY + 21)
+    if (tutor) {
+      pdf.text(`Tutor: ${tutor}`, 15, infoY + 28)
+    }
 
     // Añadir leyenda (guía de colores) a la derecha de la información del paciente, en columnas de 3 y sin el de "Borrar"
     pdf.setFontSize(14)
@@ -1301,6 +1344,9 @@ export function Odontograma({
 
     // Guardar el PDF
     pdf.save(`Odontograma_${patientName.replace(/\s+/g, "_")}.pdf`)
+
+    // Avisar que terminó la generación del PDF
+    document.dispatchEvent(new CustomEvent("odontogram-pdf-done"))
 
     toast({
       title: "Éxito",

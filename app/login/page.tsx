@@ -25,7 +25,7 @@ export default function LoginPage() {
   // Función para alternar mensajes de carga
   useEffect(() => {
     if (isLoading) {
-      const messages = ["Cargando...", "Iniciando sesión...", "Preparando el sistema...", "Cargando información..."]
+      const messages = ["Cargando...", "Iniciando sesión...", "Conectando con la base de datos...", "Preparando el sistema...", "Cargando información..."]
       let currentIndex = 0
 
       const interval = setInterval(() => {
@@ -36,6 +36,18 @@ export default function LoginPage() {
       return () => clearInterval(interval)
     }
   }, [isLoading])
+
+  // Después de login exitoso, guardar usuario en localStorage
+  const handleLoginSuccess = (user: any) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("currentUser", JSON.stringify({
+        id: user.id,
+        name: user.name || user.nombre,
+        username: user.username || user.usuario,
+        email: user.email || user.correo
+      }))
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,10 +64,14 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (res.ok) {
+        handleLoginSuccess(data.user);
         storage.setItem("isLoggedIn", true);
         storage.setItem("userRole", role);
+        storage.setItem("currentUserId", data.user.id); // Guardar el id del usuario
         setIsLoggedIn(true);
-        router.push("/");
+        document.cookie = `isLoggedIn=true; path=/; max-age=86400`;
+        window.location.href = "/"; // Fuerza recarga total
+        // router.push("/"); // Quitar esta línea si existe
       } else {
         setError(data.error || "Usuario o contraseña incorrectos");
         setIsLoading(false);
