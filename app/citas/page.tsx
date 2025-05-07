@@ -1,11 +1,12 @@
 "use client"
 
+import React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,6 @@ import {
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { storage } from "@/lib/storage"
 import { useToast } from "@/components/ui/use-toast"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -28,29 +28,32 @@ import {
   addDays,
   addWeeks,
   isSameDay,
-  parseISO,
   isWithinInterval,
   addMinutes,
-  isAfter,
-  startOfDay,
-  isValid,
   isBefore,
 } from "date-fns"
 import { es } from "date-fns/locale"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { storage } from "@/lib/storage"
+import { Dialog as Modal, DialogContent as ModalContent, DialogHeader as ModalHeader, DialogTitle as ModalTitle } from "@/components/ui/dialog"
 
-// Agregar la interfaz Appointment para incluir el campo confirmed
+// Cambia el modelo Appointment para reflejar la base de datos y facilitar el mapeo
 interface Appointment {
   id: number
-  patientId: string
-  patientName: string
-  guardian?: string // Agregar campo para el tutor
-  date: string
-  time: string
-  duration: number
-  type: string
-  notes: string
-  confirmed?: boolean // Agregar campo para el estado de confirmación
+  paciente_id: number
+  usuario_id: number
+  fecha_hora: string // ISO string
+  tipo: string
+  duracion: string
+  notas: string
+  estado: string
+  // Para UI
+  patientName?: string
+  guardian?: string
+  confirmed?: boolean
+  date?: string
+  time?: string
+  duration?: number
 }
 
 // Actualizar los horarios del consultorio
@@ -58,6 +61,35 @@ const CLINIC_START_TIME = 9 // 9:00 AM
 const CLINIC_END_TIME = 20.5 // 8:30 PM
 const LUNCH_START = 13 // 1:00 PM
 const LUNCH_END = 16.5 // 4:30 PM
+
+// Utilidad para formatear hora a 12h con a.m./p.m.
+function formatTimeTo12h(time: string) {
+  if (!time) return "-"
+  const [h, m] = time.split(":").map(Number)
+  const hour = ((h + 11) % 12) + 1
+  const ampm = h < 12 ? "a.m." : "p.m."
+  return `${hour}:${m.toString().padStart(2, "0")} ${ampm}`
+}
+
+// Utilidad para formatear fecha YYYY-MM-DD a 'd de mes año'
+function formatDateToSpanish(date: string) {
+  if (!date) return "-"
+  const [year, month, day] = date.split("-")
+  const meses = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+  ]
+  return `${parseInt(day)} de ${meses[parseInt(month) - 1]} ${year}`
+}
+
+// Utilidad para crear un Date local a partir de date y time (sin desfase)
+function getLocalDate(date: string, time: string) {
+  if (!date || !time) return new Date(NaN)
+  const [year, month, day] = date.split('-').map(Number)
+  const [hour, minute] = time.split(':').map(Number)
+  const localDate = new Date(year, month - 1, day, hour, minute)
+  return localDate
+}
 
 export default function CitasPage() {
   const router = useRouter()
@@ -82,18 +114,18 @@ export default function CitasPage() {
   const [patientSearchQuery, setPatientSearchQuery] = useState<string>("")
   const [showPatientDropdown, setShowPatientDropdown] = useState(false)
   const [patients, setPatients] = useState<any[]>([])
-  // Agregar un estado para evitar múltiples advertencias
   const [isProcessingWarning, setIsProcessingWarning] = useState(false)
+  const [patientInfo, setPatientInfo] = useState<any>(null)
 
   const [newAppointment, setNewAppointment] = useState<Appointment>({
     id: 0,
-    patientId: "",
-    patientName: "",
-    date: format(new Date(), "yyyy-MM-dd"),
-    time: "09:00",
-    duration: 30,
-    type: "Consulta de valoración",
-    notes: "",
+    paciente_id: 0,
+    usuario_id: 1,
+    fecha_hora: "",
+    tipo: "Consulta de valoración",
+    duracion: "30",
+    notas: "",
+    estado: "pendiente",
   })
 
   // Efecto para establecer la vista en "day" en dispositivos móviles
@@ -103,35 +135,79 @@ export default function CitasPage() {
     }
   }, [isMobile, view])
 
+  // Cargar citas desde la API
+  const fetchAppointments = async () => {
+    const res = await fetch("/api/citas")
+    if (res.ok) {
+      const data = await res.json()
+      setAppointments(
+        data.map((cita: any) => {
+          const fecha = new Date(cita.fecha_hora)
+          const date = fecha.toLocaleDateString('sv-SE') // YYYY-MM-DD
+          const time = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) // HH:mm
+          return {
+            ...cita,
+            confirmed: cita.estado === "confirmada",
+            date,
+            time,
+            duration: parseInt(cita.duracion),
+          }
+        })
+      )
+    }
+  }
+
+  useEffect(() => {
+    fetchAppointments()
+  }, [])
+
+  // Buscar pacientes en la base de datos
+  const fetchPatients = async (query: string) => {
+    if (!query) {
+      setPatients([])
+      return
+    }
+    try {
+      const res = await fetch(`/api/pacientes?search=${encodeURIComponent(query)}`)
+      if (res.ok) {
+        const data = await res.json()
+        // Si la respuesta es un array directo
+        if (Array.isArray(data)) {
+          setPatients(data)
+        } else if (Array.isArray(data.patients)) {
+          setPatients(data.patients)
+        } else {
+          setPatients([])
+        }
+      } else {
+        setPatients([])
+      }
+    } catch {
+      setPatients([])
+    }
+  }
+
   // Modificar el useEffect para manejar la apertura del modal de cita cuando se navega desde la página de inicio
   useEffect(() => {
-    // Simulate loading
     const timer = setTimeout(() => {
-      const storedAppointments = storage.getItem("appointments")
-      if (storedAppointments) {
-        setAppointments(storedAppointments)
-      }
-
       const storedPatients = storage.getItem("patients")
       if (storedPatients) {
         setPatients(storedPatients)
       }
 
-      // Verificar si hay un ID de cita en la URL
       const appointmentId = searchParams.get("appointmentId")
-      if (appointmentId && storedAppointments) {
-        const appointment = storedAppointments.find((app: any) => app.id.toString() === appointmentId)
+      if (appointmentId) {
+        const appointment = appointments.find((app) => app.id.toString() === appointmentId)
         if (appointment) {
           setSelectedAppointment(appointment)
           setShowInfoDialog(true)
         }
       }
-    }, 2500) // Increased delay to 2.5 seconds
+    }, 2500)
 
-    return () => clearTimeout(timer) // Clear timeout if component unmounts
-  }, [searchParams])
+    return () => clearTimeout(timer)
+  }, [searchParams, appointments])
 
-  // Modificar para guardar el ID del paciente en una referencia en lugar de usar la URL
   useEffect(() => {
     if (patientIdFromUrl) {
       patientIdRef.current = patientIdFromUrl
@@ -142,17 +218,46 @@ export default function CitasPage() {
       if (patient) {
         setNewAppointment((prev) => ({
           ...prev,
-          patientId: patientIdFromUrl,
+          paciente_id: parseInt(patientIdFromUrl),
           patientName: patient.name,
         }))
         setPatientSearchQuery(patient.name)
         setShowNewAppointmentDialog(true)
 
-        // Limpiar la URL para evitar manipulación
         window.history.replaceState({}, document.title, "/citas")
       }
     }
   }, [patientIdFromUrl])
+
+  useEffect(() => {
+    const fetchPatientNames = async () => {
+      const uniqueIds = Array.from(new Set(appointments.map(a => a.paciente_id)))
+      if (uniqueIds.length === 0) return
+      const res = await fetch(`/api/pacientes?ids=${uniqueIds.join(",")}`)
+      if (res.ok) {
+        const data = await res.json()
+        setAppointments(prev => prev.map(app => {
+          const patient = Array.isArray(data)
+            ? data.find((p: any) => p.id === app.paciente_id)
+            : (data.patients || []).find((p: any) => p.id === app.paciente_id)
+          return { ...app, patientName: patient?.name || "" }
+        }))
+      }
+    }
+    fetchPatientNames()
+    // eslint-disable-next-line
+  }, [appointments.length])
+
+  useEffect(() => {
+    if (showInfoDialog && selectedAppointment?.paciente_id) {
+      fetch(`/api/pacientes?id=${selectedAppointment.paciente_id}`)
+        .then(res => res.json())
+        .then(data => setPatientInfo(Array.isArray(data) ? data[0] : data))
+        .catch(() => setPatientInfo(null))
+    } else if (!showInfoDialog) {
+      setPatientInfo(null)
+    }
+  }, [showInfoDialog, selectedAppointment])
 
   const navigateDate = (direction: "prev" | "next") => {
     setCurrentDate((prevDate) => {
@@ -166,7 +271,6 @@ export default function CitasPage() {
     })
   }
 
-  // Check if time is within clinic hours (9am-1pm and 4:30pm-8:30pm)
   const isWithinClinicHours = (time: string): boolean => {
     const [hours, minutes] = time.split(":").map(Number)
     const hourDecimal = hours + minutes / 60
@@ -178,14 +282,13 @@ export default function CitasPage() {
   }
 
   const isAppointmentOverlap = (date: string, time: string, duration: number, excludeId?: number): boolean => {
-    const newAppStart = parseISO(`${date}T${time}`)
+    const newAppStart = getLocalDate(date, time)
     const newAppEnd = addMinutes(newAppStart, duration)
 
     return appointments.some((app) => {
       if (excludeId && app.id === excludeId) return false
-
-      const appStart = parseISO(`${app.date}T${app.time}`)
-      const appEnd = addMinutes(appStart, app.duration)
+      const appStart = getLocalDate(app.date || "", app.time || "")
+      const appEnd = addMinutes(appStart, app.duration ?? 0)
       return (
         isWithinInterval(newAppStart, { start: appStart, end: appEnd }) ||
         isWithinInterval(newAppEnd, { start: appStart, end: appEnd }) ||
@@ -195,297 +298,133 @@ export default function CitasPage() {
   }
 
   const findNextAvailableSlot = (date: string, time: string, duration: number): string => {
-    let currentTime = parseISO(`${date}T${time}`)
-    const endOfDay = parseISO(`${date}T${CLINIC_END_TIME}:00`)
-    const lunchStart = parseISO(`${date}T${LUNCH_START}:00`)
-    const lunchEnd = parseISO(`${date}T${LUNCH_END}:00`)
+    let currentTime = getLocalDate(date, time)
+    const endOfDay = getLocalDate(date, `${CLINIC_END_TIME}:00`)
+    const lunchStart = getLocalDate(date, `${LUNCH_START}:00`)
+    const lunchEnd = getLocalDate(date, `${LUNCH_END}:00`)
 
     while (currentTime < endOfDay) {
-      // Skip lunch time
       if (isWithinInterval(currentTime, { start: lunchStart, end: lunchEnd })) {
         currentTime = lunchEnd
         continue
       }
-
       const timeStr = format(currentTime, "HH:mm")
       if (isWithinClinicHours(timeStr) && !isAppointmentOverlap(date, timeStr, duration)) {
         return timeStr
       }
       currentTime = addMinutes(currentTime, 15)
     }
-
-    // If no slot found today, check the next day
-    const nextDay = addDays(parseISO(date), 1)
+    const nextDay = addDays(getLocalDate(date, "00:00"), 1)
     return findNextAvailableSlot(format(nextDay, "yyyy-MM-dd"), `${CLINIC_START_TIME}:00`, duration)
   }
 
   const isTimeInPast = (date: string, time: string): boolean => {
-    const appointmentDateTime = parseISO(`${date}T${time}`)
+    const appointmentDateTime = getLocalDate(date, time)
     const now = new Date()
     return isBefore(appointmentDateTime, now)
   }
 
-  // Función para resetear el formulario de nueva cita
   const resetNewAppointmentForm = () => {
     setNewAppointment({
       id: 0,
-      patientId: "",
-      patientName: "",
-      date: format(new Date(), "yyyy-MM-dd"),
-      time: "09:00",
-      duration: 30,
-      type: "Consulta de valoración",
-      notes: "",
+      paciente_id: 0,
+      usuario_id: 1,
+      fecha_hora: "",
+      tipo: "Consulta de valoración",
+      duracion: "30",
+      notas: "",
+      estado: "pendiente",
     })
     setPatientSearchQuery("")
     patientIdRef.current = null
   }
 
-  // Modificar la función handleAddAppointment para incluir la información del tutor
-  const handleAddAppointment = () => {
-    // Evitar múltiples advertencias
-    if (isProcessingWarning) return
-
-    if (!newAppointment.patientId || !newAppointment.time || !newAppointment.type) {
-      toast({
-        title: "Error",
-        description: "Por favor complete los campos obligatorios",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Validate date is not in the past
-    const appointmentDate = parseISO(newAppointment.date)
-    if (!isValid(appointmentDate)) {
-      toast({
-        title: "Error",
-        description: "La fecha seleccionada no es válida",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (isAfter(startOfDay(new Date()), appointmentDate)) {
-      toast({
-        title: "Error",
-        description: "No se pueden agendar citas en fechas pasadas",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Check if the selected time is in the past
-    if (isTimeInPast(newAppointment.date, newAppointment.time)) {
-      setIsProcessingWarning(true)
-      setWarningMessage("La hora seleccionada ya ha pasado. Por favor seleccione una hora futura.")
-      setShowTimePassedWarning(true)
-      return
-    }
-
-    // Validate time is within clinic hours
-    if (!isWithinClinicHours(newAppointment.time)) {
-      setIsProcessingWarning(true)
-      setWarningMessage(`El horario debe estar entre 9:00-13:00 o 16:30-20:30. Por favor seleccione otro horario.`)
+  const handleAddAppointment = async (appointmentData: Partial<Appointment>) => {
+    // Validar solapamiento antes de guardar
+    const duration = Number(appointmentData.duration || 30)
+    if (isAppointmentOverlap(appointmentData.date!, appointmentData.time!, duration)) {
+      // Calcular próxima hora disponible
+      const nextTime = findNextAvailableSlot(appointmentData.date!, appointmentData.time!, duration)
+      setRecommendedTime(nextTime)
+      setWarningMessage("El horario seleccionado choca con otra cita. Te sugerimos la próxima hora disponible.")
       setShowWarningDialog(true)
       return
     }
-
-    if (isAppointmentOverlap(newAppointment.date, newAppointment.time, newAppointment.duration)) {
-      const nextAvailable = findNextAvailableSlot(newAppointment.date, newAppointment.time, newAppointment.duration)
-      setRecommendedTime(nextAvailable)
-      setIsProcessingWarning(true)
-      setWarningMessage(`La cita se superpone con otra existente. El próximo horario disponible es: ${nextAvailable}`)
-      setShowWarningDialog(true)
-      return
+    const cita = {
+      paciente_id: appointmentData.paciente_id,
+      usuario_id: appointmentData.usuario_id || 1,
+      fecha_hora: `${appointmentData.date}T${appointmentData.time}`,
+      tipo: appointmentData.tipo,
+      duracion: (appointmentData.duration || 30).toString(),
+      notas: appointmentData.notas || "",
+      estado: "pendiente",
     }
-
-    const newId = appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1
-
-    // Obtener información del tutor del paciente
-    const patient = patients.find((p: any) => p.id.toString() === newAppointment.patientId)
-    const guardianName = patient ? patient.guardian : ""
-
-    const newAppointmentData: Appointment = {
-      ...newAppointment,
-      id: newId,
-      guardian: guardianName, // Agregar el nombre del tutor
-      confirmed: false, // Por defecto, la cita no está confirmada
-    }
-
-    const updatedAppointments = [...appointments, newAppointmentData]
-    setAppointments(updatedAppointments)
-    storage.setItem("appointments", updatedAppointments)
-
-    // Actualizar la próxima cita del paciente
-    updatePatientNextAppointment(newAppointment.patientId, newAppointment.date, newAppointment.time)
-
-    // Resetear el formulario después de guardar
-    resetNewAppointmentForm()
-
-    setShowNewAppointmentDialog(false)
-    setRecommendedTime(null)
-
-    toast({
-      title: "Éxito",
-      description: "Cita agendada correctamente",
-      variant: "success",
+    const res = await fetch("/api/citas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cita),
     })
-  }
-
-  const handleEditAppointment = () => {
-    // Evitar múltiples advertencias
-    if (isProcessingWarning) return
-
-    if (!selectedAppointment) return
-
-    // Check if the selected time is in the past
-    if (isTimeInPast(selectedAppointment.date, selectedAppointment.time)) {
-      setIsProcessingWarning(true)
-      setWarningMessage("La hora seleccionada ya ha pasado. Por favor seleccione una hora futura.")
-      setShowTimePassedWarning(true)
-      return
-    }
-
-    // Validate time is within clinic hours
-    if (!isWithinClinicHours(selectedAppointment.time)) {
-      toast({
-        title: "Error",
-        description: "El horario debe estar entre 9:00-13:00 o 16:30-20:30",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Check for overlap with other appointments (excluding this one)
-    if (
-      isAppointmentOverlap(
-        selectedAppointment.date,
-        selectedAppointment.time,
-        selectedAppointment.duration,
-        selectedAppointment.id,
-      )
-    ) {
-      toast({
-        title: "Error",
-        description: "La cita se superpone con otra existente",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const updatedAppointments = appointments.map((appointment) =>
-      appointment.id === selectedAppointment.id ? selectedAppointment : appointment,
-    )
-
-    setAppointments(updatedAppointments)
-    storage.setItem("appointments", updatedAppointments)
-
-    // Actualizar la próxima cita del paciente
-    updatePatientNextAppointment(selectedAppointment.patientId, selectedAppointment.date, selectedAppointment.time)
-
-    setShowEditAppointmentDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: "Cita actualizada correctamente",
-      variant: "success",
-    })
-  }
-
-  const handleCancelAppointment = (id: number) => {
-    if (confirm("¿Está seguro de que desea cancelar esta cita?")) {
-      // Obtener la cita antes de eliminarla
-      const appointmentToCancel = appointments.find((app) => app.id === id)
-
-      const updatedAppointments = appointments.filter((appointment) => appointment.id !== id)
-      setAppointments(updatedAppointments)
-      storage.setItem("appointments", updatedAppointments)
-
-      // Si encontramos la cita, actualizar la próxima cita del paciente
-      if (appointmentToCancel) {
-        updatePatientNextAppointmentAfterCancel(appointmentToCancel.patientId)
-      }
-
-      toast({
-        title: "Éxito",
-        description: "Cita cancelada correctamente",
-        variant: "success",
-      })
+    if (res.ok) {
+      fetchAppointments()
+      setShowNewAppointmentDialog(false)
+      toast({ title: "Éxito", description: "Cita agendada correctamente", variant: "success" })
+    } else {
+      toast({ title: "Error", description: "No se pudo agendar la cita", variant: "destructive" })
     }
   }
 
-  const updatePatientNextAppointment = (patientId: string, date: string, time: string) => {
-    const patients = storage.getItem("patients") || []
-    const formattedDate = format(parseISO(`${date}T${time}`), "d 'de' MMMM, yyyy HH:mm", { locale: es })
-
-    const updatedPatients = patients.map((patient: any) => {
-      if (patient.id.toString() === patientId) {
-        // Obtener todas las citas futuras de este paciente
-        const patientAppointments = appointments
-          .filter((app) => app.patientId === patientId)
-          .filter((app) => {
-            const appDate = parseISO(`${app.date}T${app.time}`)
-            return isAfter(appDate, new Date())
-          })
-          .sort((a, b) => {
-            const dateA = parseISO(`${a.date}T${a.time}`)
-            const dateB = parseISO(`${b.date}T${b.time}`)
-            return dateA.getTime() - dateB.getTime()
-          })
-
-        // Si hay citas futuras, usar la más próxima
-        if (patientAppointments.length > 0) {
-          const nextApp = patientAppointments[0]
-          const nextAppDate = format(parseISO(`${nextApp.date}T${nextApp.time}`), "d 'de' MMMM, yyyy HH:mm", {
-            locale: es,
-          })
-          return { ...patient, nextVisit: nextAppDate }
-        }
-
-        // Si no hay otras citas, usar la que acabamos de agregar/editar
-        return { ...patient, nextVisit: formattedDate }
-      }
-      return patient
+  const handleEditAppointment = async (appointmentData: Appointment) => {
+    const cita = {
+      id: appointmentData.id,
+      paciente_id: appointmentData.paciente_id,
+      usuario_id: appointmentData.usuario_id || 1,
+      fecha_hora: `${appointmentData.date}T${appointmentData.time}`,
+      tipo: appointmentData.tipo,
+      duracion: (appointmentData.duration || 30).toString(),
+      notas: appointmentData.notas || "",
+      estado: appointmentData.confirmed ? "confirmada" : appointmentData.estado || "pendiente",
+    }
+    const res = await fetch("/api/citas", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cita),
     })
-
-    storage.setItem("patients", updatedPatients)
+    if (res.ok) {
+      fetchAppointments()
+      setShowEditAppointmentDialog(false)
+      toast({ title: "Éxito", description: "Cita actualizada correctamente", variant: "success" })
+    } else {
+      toast({ title: "Error", description: "No se pudo actualizar la cita", variant: "destructive" })
+    }
   }
 
-  const updatePatientNextAppointmentAfterCancel = (patientId: string) => {
-    const patients = storage.getItem("patients") || []
-
-    const updatedPatients = patients.map((patient: any) => {
-      if (patient.id.toString() === patientId) {
-        // Obtener todas las citas futuras de este paciente
-        const patientAppointments = appointments
-          .filter((app) => app.patientId === patientId && app.id !== (selectedAppointment?.id || 0))
-          .filter((app) => {
-            const appDate = parseISO(`${app.date}T${app.time}`)
-            return isAfter(appDate, new Date())
-          })
-          .sort((a, b) => {
-            const dateA = parseISO(`${a.date}T${a.time}`)
-            const dateB = parseISO(`${b.date}T${b.time}`)
-            return dateA.getTime() - dateB.getTime()
-          })
-
-        // Si hay citas futuras, usar la más próxima
-        if (patientAppointments.length > 0) {
-          const nextApp = patientAppointments[0]
-          const nextAppDate = format(parseISO(`${nextApp.date}T${nextApp.time}`), "d 'de' MMMM, yyyy HH:mm", {
-            locale: es,
-          })
-          return { ...patient, nextVisit: nextAppDate }
-        }
-
-        // Si no hay otras citas, marcar como pendiente
-        return { ...patient, nextVisit: "Pendiente" }
-      }
-      return patient
+  const handleCancelAppointment = async (id: number) => {
+    if (!confirm("¿Está seguro de que desea cancelar esta cita?")) return
+    const res = await fetch("/api/citas", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
     })
+    if (res.ok) {
+      fetchAppointments()
+      toast({ title: "Éxito", description: "Cita cancelada correctamente", variant: "success" })
+    } else {
+      toast({ title: "Error", description: "No se pudo cancelar la cita", variant: "destructive" })
+    }
+  }
 
-    storage.setItem("patients", updatedPatients)
+  const handleConfirmAppointment = async (id: number) => {
+    const res = await fetch("/api/citas", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, estado: "confirmada" }),
+    })
+    if (res.ok) {
+      fetchAppointments()
+      toast({ title: "Éxito", description: "Cita confirmada correctamente", variant: "success" })
+    } else {
+      toast({ title: "Error", description: "No se pudo confirmar la cita", variant: "destructive" })
+    }
   }
 
   const handleAppointmentClick = (appointment: Appointment) => {
@@ -493,282 +432,207 @@ export default function CitasPage() {
     setShowInfoDialog(true)
   }
 
-  // Agregar función para confirmar cita
-  const handleConfirmAppointment = () => {
-    if (!selectedAppointment) return
-
-    const updatedAppointment = {
-      ...selectedAppointment,
-      confirmed: true,
-    }
-
-    const updatedAppointments = appointments.map((appointment) =>
-      appointment.id === selectedAppointment.id ? updatedAppointment : appointment,
-    )
-
-    setAppointments(updatedAppointments)
-    storage.setItem("appointments", updatedAppointments)
-    setSelectedAppointment(updatedAppointment)
-
-    toast({
-      title: "Éxito",
-      description: "Cita confirmada correctamente",
-      variant: "success",
-    })
-  }
-
-  // Modificarr el componente WeekView para mostrar las citas confirmadas en verde
-  const WeekView = () => {
-    const weekDays = eachDayOfInterval({
-      start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-      end: endOfWeek(currentDate, { weekStartsOn: 1 }),
-    })
-    const timeSlots = Array.from({ length: (CLINIC_END_TIME - CLINIC_START_TIME) * 4 }, (_, i) => {
-      const hour = Math.floor(i / 4) + CLINIC_START_TIME
-      const minute = (i % 4) * 15
-      return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-    })
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-[800px]">
-          <thead>
-            <tr>
-              <th className="border p-2 w-20 sticky left-0 bg-background z-10">Hora</th>
-              {weekDays.map((day) => (
-                <th key={day.toString()} className="border p-2 min-w-[120px]">
-                  {format(day, "EEEE", { locale: es })}
-                  <br />
-                  {format(day, "d MMM", { locale: es })}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {timeSlots.map((time, index) => {
-              const isQuarterHour = index % 4 === 0
-              const isLunchTime =
-                time.startsWith("13:") ||
-                time.startsWith("14:") ||
-                time.startsWith("15:") ||
-                (time.startsWith("16:") && time <= "16:30")
-
-              return (
-                <tr
-                  key={time}
-                  className={`${isQuarterHour ? "border-t border-gray-300" : ""} ${isLunchTime ? "bg-gray-300 dark:bg-gray-700" : ""}`}
-                >
-                  {isQuarterHour && (
-                    <td className="border-r p-1 text-sm font-semibold sticky left-0 bg-background z-10" rowSpan={4}>
-                      {time}
-                    </td>
-                  )}
-                  {weekDays.map((day) => {
-                    const appointmentsForSlot = appointments.filter(
-                      (app) => app.date === format(day, "yyyy-MM-dd") && app.time === time,
-                    )
-                    return (
-                      <td key={day.toString()} className="border-r p-1 relative" style={{ height: "20px" }}>
-                        {appointmentsForSlot.map((app) => {
-                          const durationInSlots = app.duration / 15
-                          return (
-                            <div
-                              key={app.id}
-                              className={`absolute left-0 right-0 ${app.confirmed ? "bg-green-600" : "bg-primary"} text-primary-foreground p-1 rounded-lg text-xs md:text-sm overflow-hidden cursor-pointer hover:${app.confirmed ? "bg-green-700" : "bg-primary/90"} transition-colors`}
-                              style={{
-                                top: "0",
-                                height: `${durationInSlots * 20}px`,
-                                zIndex: 10,
-                              }}
-                              onClick={() => handleAppointmentClick(app)}
-                            >
-                              <div className="truncate">
-                                {app.patientName} - {app.type}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-    )
-  }
-
-  // Modificar el componente DayView para mostrar las citas confirmadas en verde
-  const DayView = () => {
-    const timeSlots = Array.from({ length: (CLINIC_END_TIME - CLINIC_START_TIME) * 4 }, (_, i) => {
-      const hour = Math.floor(i / 4) + CLINIC_START_TIME
-      const minute = (i % 4) * 15
-      return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-    })
-    const dayAppointments = appointments.filter((app) => app.date === format(currentDate, "yyyy-MM-dd"))
-
-    return (
-      <div className="space-y-1">
-        {timeSlots.map((time, index) => {
-          const appointmentsForSlot = dayAppointments.filter((app) => app.time === time)
-          const isQuarterHour = index % 4 === 0
-          const isLunchTime =
-            time.startsWith("13:") ||
-            time.startsWith("14:") ||
-            time.startsWith("15:") ||
-            (time.startsWith("16:") && time <= "16:30")
-
-          return (
-            <div
-              key={time}
-              className={`flex border-b py-1 ${isQuarterHour ? "border-gray-300" : "border-gray-100"} ${isLunchTime ? "bg-gray-300 dark:bg-gray-700" : ""}`}
-            >
-              {isQuarterHour && <div className="w-20 font-semibold text-sm">{time}</div>}
-              {!isQuarterHour && <div className="w-20"></div>}
-              <div className="flex-1 relative">
-                {appointmentsForSlot.map((app) => {
-                  const durationInSlots = app.duration / 15
-                  return (
-                    <div
-                      key={app.id}
-                      className={`absolute left-0 right-0 ${app.confirmed ? "bg-green-600" : "bg-primary"} text-primary-foreground p-1 rounded-lg text-sm overflow-hidden cursor-pointer hover:${app.confirmed ? "bg-green-700" : "bg-primary/90"} transition-colors`}
-                      style={{
-                        top: "0",
-                        height: `${durationInSlots * 100}%`,
-                        zIndex: 10,
-                      }}
-                      onClick={() => handleAppointmentClick(app)}
-                    >
-                      {app.patientName} - {app.type}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  // Modificar el componente MonthView para mostrar las citas confirmadas en verde
-  const MonthView = () => {
-    const startDate = startOfWeek(currentDate, { weekStartsOn: 1 })
-    const endDate = addDays(startDate, 34) // 5 weeks
-    const days = eachDayOfInterval({ start: startDate, end: endDate })
-
-    return (
-      <div className="grid grid-cols-7 gap-2">
-        {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((day) => (
-          <div key={day} className="text-center font-semibold">
-            {day}
-          </div>
-        ))}
-        {days.map((day) => {
-          const dayAppointments = appointments.filter((app) => app.date === format(day, "yyyy-MM-dd"))
-          return (
-            <div key={day.toString()} className={`border p-2 ${isSameDay(day, new Date()) ? "bg-muted" : ""}`}>
-              <div className="text-right">{format(day, "d")}</div>
-              {dayAppointments.slice(0, 3).map((app) => (
-                <div
-                  key={app.id}
-                  className={`text-xs truncate ${app.confirmed ? "bg-green-500/10" : "bg-primary/10"} p-1 rounded-md mb-1 cursor-pointer hover:${app.confirmed ? "bg-green-500/20" : "bg-primary/20"}`}
-                  onClick={() => handleAppointmentClick(app)}
-                >
-                  {app.time} {app.patientName}
-                </div>
-              ))}
-              {dayAppointments.length > 3 && (
-                <div className="text-xs text-muted-foreground">+{dayAppointments.length - 3} más</div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-
-  const WarningDialog = () => (
-    <Dialog
-      open={showWarningDialog}
-      onOpenChange={(open) => {
-        setShowWarningDialog(open)
-        if (!open) setIsProcessingWarning(false)
-      }}
-    >
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Advertencia</DialogTitle>
-        </DialogHeader>
-        <div className="py-4">
-          <p>{warningMessage}</p>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={() => {
-              setShowWarningDialog(false)
-              setIsProcessingWarning(false)
-            }}
-          >
-            Cerrar
-          </Button>
-          {recommendedTime && (
-            <Button
-              onClick={() => {
-                setNewAppointment((prev) => ({ ...prev, time: recommendedTime }))
-                setShowWarningDialog(false)
-                setIsProcessingWarning(false)
-                setShowNewAppointmentDialog(true) // Reabre el modal de nueva cita
-              }}
-            >
-              Usar horario recomendado
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-
-  const TimePassedWarningDialog = () => (
-    <Dialog
-      open={showTimePassedWarning}
-      onOpenChange={(open) => {
-        setShowTimePassedWarning(open)
-        if (!open) setIsProcessingWarning(false)
-      }}
-    >
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Hora no válida</DialogTitle>
-        </DialogHeader>
-        <div className="py-4">
-          <p>{warningMessage}</p>
-        </div>
-        <DialogFooter>
-          <Button
-            onClick={() => {
-              setShowTimePassedWarning(false)
-              setIsProcessingWarning(false)
-            }}
-          >
-            Entendido
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-
   const updateMinTime = (date: string) => {
-    if (isSameDay(parseISO(date), new Date())) {
+    if (isSameDay(getLocalDate(date, "00:00"), new Date())) {
       setMinTime(format(new Date(), "HH:mm"))
     } else {
       setMinTime("09:00")
     }
   }
 
-  // Modificar el diálogo de información de cita para incluir la información del tutor y el botón de confirmar
+  // WeekView: cuadrícula semanal tipo Google Calendar
+  function WeekView() {
+    // Calcular los días de la semana actual (lunes a domingo)
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+    const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
+    const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
+
+    // Horas de la cuadrícula (9:00 a 20:30 cada 30 min)
+    const hours: string[] = []
+    for (let h = 9; h <= 20; h++) {
+      hours.push(`${h.toString().padStart(2, "0")}:00`)
+      if (h !== 20) hours.push(`${h.toString().padStart(2, "0")}:30`)
+    }
+
+    // Citas de la semana (comparar fechas como string, no parseISO)
+    const weekAppointments = appointments.filter(app => {
+      if (!app.date) return false
+      const match = days.some(day => app.date === format(day, "yyyy-MM-dd"))
+      return match
+    })
+
+    // Render
+    return (
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-8 min-w-[900px] border rounded">
+          {/* Header: días */}
+          <div className="bg-muted border-b border-r h-12 flex items-center justify-center font-bold text-sm">Hora</div>
+          {days.map((day, idx) => (
+            <div key={idx} className="bg-muted border-b border-r h-12 flex items-center justify-center font-bold text-sm">
+              {format(day, "EEE d", { locale: es })}
+            </div>
+          ))}
+          {/* Filas de horas */}
+          {hours.map((hour, rowIdx) => (
+            <React.Fragment key={rowIdx}>
+              {/* Columna de hora */}
+              <div key={`h-${hour}`} className="border-b border-r h-16 flex items-center justify-center text-xs bg-muted/50">
+                {hour}
+              </div>
+              {/* Celdas de días */}
+              {days.map((day, colIdx) => {
+                // Marcar horario de comida
+                const [h, m] = hour.split(":").map(Number)
+                const hourDecimal = h + m / 60
+                const isLunch = hourDecimal >= LUNCH_START && hourDecimal < LUNCH_END
+                // Buscar citas que inician en este día/hora (comparar strings)
+                const cellAppointments = weekAppointments.filter(app => {
+                  return app.date === format(day, "yyyy-MM-dd") && app.time === hour
+                })
+                // Renderizar cada cita con altura proporcional a la duración
+                return (
+                  <div key={`cell-${rowIdx}-${colIdx}`} className={`border-b border-r h-16 relative ${isLunch ? "bg-gray-300" : ""}`}>
+                    {cellAppointments.map(app => {
+                      // Calcular slots de 30 min
+                      const durationMin = Number(app.duracion || app.duration || 30)
+                      const slots = Math.ceil(durationMin / 30)
+                      // Altura base: h-16 (64px) por slot
+                      const height = 64 * slots
+                      return (
+                        <div
+                          key={app.id}
+                          className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow 
+                            ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white`}
+                          style={{ zIndex: 2, height: `${height - 8}px` }}
+                          onClick={() => handleAppointmentClick(app)}
+                        >
+                          <div className="font-semibold truncate">{app.patientName}</div>
+                          <div className="truncate">{app.tipo}</div>
+                          <div className="truncate">{formatTimeTo12h(app.time || "")} ({durationMin} min)</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Vista de Día
+  function DayView() {
+    const day = currentDate
+    // Horas de la cuadrícula (9:00 a 20:30 cada 30 min)
+    const hours: string[] = []
+    for (let h = 9; h <= 20; h++) {
+      hours.push(`${h.toString().padStart(2, "0")}:00`)
+      if (h !== 20) hours.push(`${h.toString().padStart(2, "0")}:30`)
+    }
+    // Citas del día
+    const dayAppointments = appointments.filter(app => app.date === format(day, "yyyy-MM-dd"))
+    return (
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-2 min-w-[350px] border rounded">
+          {/* Header */}
+          <div className="bg-muted border-b border-r h-12 flex items-center justify-center font-bold text-sm">Hora</div>
+          <div className="bg-muted border-b h-12 flex items-center justify-center font-bold text-sm">
+            {format(day, "EEEE d 'de' MMMM yyyy", { locale: es })}
+          </div>
+          {/* Filas de horas */}
+          {hours.map((hour, rowIdx) => {
+            // Marcar horario de comida
+            const [h, m] = hour.split(":").map(Number)
+            const hourDecimal = h + m / 60
+            const isLunch = hourDecimal >= LUNCH_START && hourDecimal < LUNCH_END
+            // Citas que inician en este slot
+            const cellAppointments = dayAppointments.filter(app => app.time === hour)
+            return (
+              <React.Fragment key={rowIdx}>
+                <div className="border-b border-r h-16 flex items-center justify-center text-xs bg-muted/50">{hour}</div>
+                <div className={`border-b h-16 relative ${isLunch ? "bg-gray-300" : ""}`}>
+                  {cellAppointments.map(app => {
+                    const durationMin = Number(app.duracion || app.duration || 30)
+                    const slots = Math.ceil(durationMin / 30)
+                    const height = 64 * slots
+                    return (
+                      <div
+                        key={app.id}
+                        className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white`}
+                        style={{ zIndex: 2, height: `${height - 8}px` }}
+                        onClick={() => handleAppointmentClick(app)}
+                      >
+                        <div className="font-semibold truncate">{app.patientName}</div>
+                        <div className="truncate">{app.tipo}</div>
+                        <div className="truncate">{formatTimeTo12h(app.time || "")} ({durationMin} min)</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </React.Fragment>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // Vista de Mes
+  function MonthView() {
+    // Primer día del mes
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    // Último día del mes
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    // Primer día a mostrar (lunes anterior o igual al primer día del mes)
+    const start = startOfWeek(firstDay, { weekStartsOn: 1 })
+    // Último día a mostrar (domingo posterior o igual al último día del mes)
+    const end = endOfWeek(lastDay, { weekStartsOn: 1 })
+    const days = eachDayOfInterval({ start, end })
+    // Agrupar citas por día
+    const appointmentsByDay: Record<string, Appointment[]> = {}
+    appointments.forEach(app => {
+      if (!app.date) return
+      if (!appointmentsByDay[app.date]) appointmentsByDay[app.date] = []
+      appointmentsByDay[app.date].push(app)
+    })
+    return (
+      <div className="overflow-x-auto">
+        <div className="grid grid-cols-7 min-w-[900px] border rounded">
+          {/* Header: días de la semana */}
+          {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d, idx) => (
+            <div key={idx} className="bg-muted border-b h-12 flex items-center justify-center font-bold text-sm">{d}</div>
+          ))}
+          {/* Celdas del mes */}
+          {days.map((day, idx) => {
+            const dateStr = format(day, "yyyy-MM-dd")
+            const isCurrentMonth = day.getMonth() === currentDate.getMonth()
+            const dayAppointments = appointmentsByDay[dateStr] || []
+            return (
+              <div key={idx} className={`border-b border-r min-h-[90px] p-1 align-top ${isCurrentMonth ? "bg-white" : "bg-muted/50"}`}>
+                <div className="text-xs font-bold mb-1 text-right">{day.getDate()}</div>
+                {dayAppointments.slice(0, 3).map(app => (
+                  <div
+                    key={app.id}
+                    className={`mb-1 px-1 py-0.5 rounded text-xs cursor-pointer truncate ${app.estado === "confirmada" ? "bg-green-600 text-white" : "bg-primary/90 text-white"}`}
+                    onClick={() => handleAppointmentClick(app)}
+                    title={`${app.patientName} - ${formatTimeTo12h(app.time || "")}`}
+                  >
+                    {formatTimeTo12h(app.time || "")} {app.patientName}
+                  </div>
+                ))}
+                {dayAppointments.length > 3 && (
+                  <div className="text-xs text-muted-foreground">+{dayAppointments.length - 3} más</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -840,7 +704,6 @@ export default function CitasPage() {
         onOpenChange={(open) => {
           setShowNewAppointmentDialog(open)
           if (!open) {
-            // Resetear el formulario cuando se cierra el modal
             resetNewAppointmentForm()
           }
         }}
@@ -854,7 +717,6 @@ export default function CitasPage() {
           </DialogHeader>
           <ScrollArea className="max-h-[calc(90vh-180px)]">
             <div className="grid gap-4 py-4 pr-4">
-              {/* Modificar la parte donde se muestra el selector de fecha y hora */}
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="patient" className="text-right">
                   Paciente *
@@ -867,8 +729,8 @@ export default function CitasPage() {
                       value={patientSearchQuery || ""}
                       onChange={(e) => {
                         setPatientSearchQuery(e.target.value)
-                        // Cuando se escribe, mostrar la lista de pacientes filtrados
                         setShowPatientDropdown(e.target.value.length > 0)
+                        fetchPatients(e.target.value)
                       }}
                       className="w-full"
                     />
@@ -885,7 +747,7 @@ export default function CitasPage() {
                               onClick={() => {
                                 setNewAppointment({
                                   ...newAppointment,
-                                  patientId: patient.id.toString(),
+                                  paciente_id: patient.id,
                                   patientName: patient.name,
                                 })
                                 setPatientSearchQuery(patient.name)
@@ -907,22 +769,18 @@ export default function CitasPage() {
                       </div>
                     )}
                   </div>
-                  {newAppointment.patientId && (
-                    <div className="text-xs text-muted-foreground">
-                      {(() => {
-                        const patient = patients.find((p: any) => p.id.toString() === newAppointment.patientId)
-                        if (patient) {
-                          return (
-                            <>
-                              <span>Tutor: {patient.guardian}</span>
-                              {patient.phone && <span className="ml-2 text-gray-400">• Tel: {patient.phone}</span>}
-                            </>
-                          )
-                        }
-                        return null
-                      })()}
-                    </div>
-                  )}
+                  {newAppointment.paciente_id > 0 && (() => {
+                    const patient = patients.find((p: any) => p.id === newAppointment.paciente_id)
+                    if (patient) {
+                      return (
+                        <div className="mt-2 text-sm text-muted-foreground border rounded p-2 bg-muted/30">
+                          <div><b>Tutor:</b> {patient.guardian || "Sin tutor registrado"}</div>
+                          <div><b>Teléfono:</b> {patient.phone || "Sin teléfono"}</div>
+                        </div>
+                      )
+                    }
+                    return null
+                  })()}
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -933,7 +791,7 @@ export default function CitasPage() {
                   <Input
                     id="date"
                     type="date"
-                    value={newAppointment.date}
+                    value={newAppointment.date || ""}
                     min={format(new Date(), "yyyy-MM-dd")}
                     onChange={(e) => {
                       setNewAppointment({ ...newAppointment, date: e.target.value })
@@ -953,7 +811,7 @@ export default function CitasPage() {
                   <Input
                     id="time"
                     type="time"
-                    value={newAppointment.time}
+                    value={newAppointment.time || ""}
                     min={minTime}
                     max="20:30"
                     onChange={(e) => setNewAppointment({ ...newAppointment, time: e.target.value })}
@@ -972,7 +830,7 @@ export default function CitasPage() {
                 </Label>
                 <div className="col-span-3">
                   <Select
-                    value={newAppointment.duration.toString()}
+                    value={newAppointment.duration?.toString()}
                     onValueChange={(value) =>
                       setNewAppointment({ ...newAppointment, duration: Number.parseInt(value) })
                     }
@@ -996,8 +854,8 @@ export default function CitasPage() {
                 </Label>
                 <div className="col-span-3">
                   <Select
-                    value={newAppointment.type}
-                    onValueChange={(value) => setNewAppointment({ ...newAppointment, type: value })}
+                    value={newAppointment.tipo}
+                    onValueChange={(value) => setNewAppointment({ ...newAppointment, tipo: value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccionar tipo" />
@@ -1023,8 +881,8 @@ export default function CitasPage() {
                 </Label>
                 <Textarea
                   id="notes"
-                  value={newAppointment.notes}
-                  onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
+                  value={newAppointment.notas}
+                  onChange={(e) => setNewAppointment({ ...newAppointment, notas: e.target.value })}
                   className="col-span-3"
                   placeholder="Notas adicionales sobre la cita"
                   autoFocus={false}
@@ -1042,72 +900,139 @@ export default function CitasPage() {
             >
               Cancelar
             </Button>
-            <Button onClick={handleAddAppointment}>Guardar</Button>
+            <Button onClick={() => handleAddAppointment(newAppointment)}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Edit Appointment Dialog */}
+      {/* Modal de advertencia de solapamiento */}
+      <Dialog open={showWarningDialog} onOpenChange={setShowWarningDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="text-yellow-500 w-8 h-8" />
+                <span className="text-yellow-700">Advertencia de horario</span>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mb-4 text-base">{warningMessage}</div>
+          {recommendedTime && (
+            <div className="mb-4 text-sm">
+              <b>Próxima hora disponible:</b> {recommendedTime}
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setShowWarningDialog(false)}>Cancelar</Button>
+            <Button className="bg-yellow-500 hover:bg-yellow-600 text-black" onClick={() => {
+              if (recommendedTime) {
+                setNewAppointment(prev => ({ ...prev, time: recommendedTime }))
+              }
+              setShowWarningDialog(false)
+            }}>Aceptar sugerencia</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de detalle de cita */}
+      <Modal open={showInfoDialog} onOpenChange={setShowInfoDialog}>
+        <ModalContent className="max-w-md">
+          <ModalHeader>
+            <ModalTitle>Detalle de la cita</ModalTitle>
+          </ModalHeader>
+          {selectedAppointment && (
+            <div className="space-y-4">
+              <div>
+                <div className="font-bold mb-1">Información de la cita</div>
+                <div><b>Fecha:</b> {selectedAppointment.date ? formatDateToSpanish(selectedAppointment.date) : "-"}</div>
+                <div><b>Hora:</b> {selectedAppointment.time ? formatTimeTo12h(selectedAppointment.time) : "-"}</div>
+                <div><b>Duración:</b> {selectedAppointment.duracion || selectedAppointment.duration || 30} min</div>
+                <div><b>Tipo:</b> {selectedAppointment.tipo}</div>
+                <div><b>Notas:</b> {selectedAppointment.notas || "Sin notas"}</div>
+                <div><b>Estado:</b> {selectedAppointment.estado}</div>
+              </div>
+              <div>
+                <div className="font-bold mb-1">Información del paciente</div>
+                {patientInfo ? (
+                  <>
+                    <div><b>Nombre:</b> {patientInfo.name || "-"}</div>
+                    <div><b>Tutor:</b> {patientInfo.guardian || "Sin tutor registrado"}</div>
+                    <div><b>Edad:</b> {(patientInfo.age || patientInfo.edad ? `${patientInfo.age || patientInfo.edad} años` : "-")}</div>
+                    <div><b>Teléfono:</b> {patientInfo.phone || "Sin teléfono"}</div>
+                    <div><b>Teléfono secundario:</b> {patientInfo.additionalPhone || (patientInfo.additionalPhones?.[0] || "-")}</div>
+                    <div><b>Correo:</b> {patientInfo.email || "-"}</div>
+                  </>
+                ) : (
+                  <div className="text-muted-foreground text-sm">Cargando información del paciente...</div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-4">
+                {selectedAppointment.estado !== "confirmada" && (
+                  <Button className="bg-green-600 hover:bg-green-700" onClick={async () => {
+                    await handleConfirmAppointment(selectedAppointment.id)
+                    setShowInfoDialog(false)
+                  }}>Confirmar</Button>
+                )}
+                {selectedAppointment.estado !== "confirmada" && (
+                  <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+                    setShowEditAppointmentDialog(true)
+                    setShowInfoDialog(false)
+                    setSelectedAppointment(selectedAppointment)
+                  }}>Editar</Button>
+                )}
+                {selectedAppointment.estado !== "cancelada" && (
+                  <Button className="bg-red-600 hover:bg-red-700" onClick={async () => {
+                    await handleEditAppointment({ ...selectedAppointment, estado: "cancelada", confirmed: false })
+                    setShowInfoDialog(false)
+                  }}>Cancelar</Button>
+                )}
+                <Button className="bg-gray-400 hover:bg-gray-500 text-black" onClick={() => setShowInfoDialog(false)}>Cerrar</Button>
+              </div>
+            </div>
+          )}
+        </ModalContent>
+      </Modal>
+
+      {/* Modal de edición de cita */}
       <Dialog open={showEditAppointmentDialog} onOpenChange={setShowEditAppointmentDialog}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Editar Cita</DialogTitle>
-            <DialogDescription>
-              Modifique los detalles de la cita. Los campos marcados con * son obligatorios.
-            </DialogDescription>
+            <DialogDescription>Modifica los datos de la cita y guarda los cambios.</DialogDescription>
           </DialogHeader>
           {selectedAppointment && (
             <ScrollArea className="max-h-[calc(90vh-180px)]">
               <div className="grid gap-4 py-4 pr-4">
-                {/* Agregar la misma modificación para el diálogo de edición */}
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="edit-date" className="text-right">
-                    Fecha *
-                  </Label>
+                  <Label htmlFor="edit-date" className="text-right">Fecha *</Label>
                   <div className="col-span-3">
                     <Input
                       id="edit-date"
                       type="date"
-                      value={selectedAppointment.date}
-                      min={format(new Date(), "yyyy-MM-dd")}
-                      onChange={(e) => setSelectedAppointment({ ...selectedAppointment, date: e.target.value })}
+                      value={selectedAppointment.date || ""}
+                      onChange={e => setSelectedAppointment({ ...selectedAppointment, date: e.target.value })}
                       required
-                      className="date-input"
-                      autoFocus={false}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="edit-time" className="text-right">
-                    Hora *
-                  </Label>
+                  <Label htmlFor="edit-time" className="text-right">Hora *</Label>
                   <div className="col-span-3">
                     <Input
                       id="edit-time"
                       type="time"
-                      value={selectedAppointment.time}
-                      min={isSameDay(parseISO(selectedAppointment.date), new Date()) ? minTime : "09:00"}
-                      max="20:30"
-                      onChange={(e) => setSelectedAppointment({ ...selectedAppointment, time: e.target.value })}
+                      value={selectedAppointment.time || ""}
+                      onChange={e => setSelectedAppointment({ ...selectedAppointment, time: e.target.value })}
                       required
-                      className="time-input"
-                      autoFocus={false}
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Horarios disponibles: 9:00 AM - 1:00 PM y 4:30 PM - 8:30 PM
-                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="edit-duration" className="text-right">
-                    Duración
-                  </Label>
+                  <Label htmlFor="edit-duration" className="text-right">Duración</Label>
                   <div className="col-span-3">
                     <Select
-                      value={selectedAppointment.duration.toString()}
-                      onValueChange={(value) =>
-                        setSelectedAppointment({ ...selectedAppointment, duration: Number.parseInt(value) })
-                      }
+                      value={selectedAppointment.duration?.toString()}
+                      onValueChange={value => setSelectedAppointment({ ...selectedAppointment, duration: Number.parseInt(value) })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar duración" />
@@ -1123,13 +1048,11 @@ export default function CitasPage() {
                   </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="edit-type" className="text-right">
-                    Tipo *
-                  </Label>
+                  <Label htmlFor="edit-type" className="text-right">Tipo *</Label>
                   <div className="col-span-3">
                     <Select
-                      value={selectedAppointment.type}
-                      onValueChange={(value) => setSelectedAppointment({ ...selectedAppointment, type: value })}
+                      value={selectedAppointment.tipo}
+                      onValueChange={value => setSelectedAppointment({ ...selectedAppointment, tipo: value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar tipo" />
@@ -1150,162 +1073,29 @@ export default function CitasPage() {
                   </div>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="edit-notes" className="text-right">
-                    Notas
-                  </Label>
+                  <Label htmlFor="edit-notes" className="text-right">Notas</Label>
                   <Textarea
                     id="edit-notes"
-                    value={selectedAppointment.notes}
-                    onChange={(e) => setSelectedAppointment({ ...selectedAppointment, notes: e.target.value })}
+                    value={selectedAppointment.notas}
+                    onChange={e => setSelectedAppointment({ ...selectedAppointment, notas: e.target.value })}
                     className="col-span-3"
                     placeholder="Notas adicionales sobre la cita"
-                    autoFocus={false}
                   />
                 </div>
               </div>
             </ScrollArea>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditAppointmentDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleEditAppointment}>Guardar Cambios</Button>
+            <Button variant="outline" onClick={() => setShowEditAppointmentDialog(false)}>Cancelar</Button>
+            <Button onClick={async () => {
+              if (selectedAppointment) {
+                await handleEditAppointment(selectedAppointment)
+                setShowEditAppointmentDialog(false)
+              }
+            }}>Guardar cambios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Appointment Info Dialog */}
-      <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Detalles de la Cita</DialogTitle>
-          </DialogHeader>
-          {selectedAppointment && (
-            <div className="max-h-[calc(90vh-180px)] overflow-y-auto pr-4 custom-scrollbar">
-              <div className="space-y-6 p-1">
-                <div className="bg-muted/30 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-primary mb-3 border-b pb-1">Información de la Cita</h3>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="font-semibold">Fecha:</Label>
-                      <p>{format(parseISO(selectedAppointment.date), "d 'de' MMMM, yyyy", { locale: es })}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Hora:</Label>
-                      <p>{selectedAppointment.time}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Duración:</Label>
-                      <p>{selectedAppointment.duration} minutos</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Tipo:</Label>
-                      <p>{selectedAppointment.type}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Estado:</Label>
-                      <p
-                        className={
-                          selectedAppointment.confirmed ? "text-green-600 font-medium" : "text-amber-600 font-medium"
-                        }
-                      >
-                        {selectedAppointment.confirmed ? "Confirmada" : "Pendiente de confirmación"}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Notas:</Label>
-                      <p>{selectedAppointment.notes || "Sin notas adicionales"}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-muted/30 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-primary mb-3 border-b pb-1">Información del Paciente</h3>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="font-semibold">Paciente:</Label>
-                      <p>{selectedAppointment.patientName}</p>
-                    </div>
-                    <div>
-                      <Label className="font-semibold">Tutor:</Label>
-                      <p>{selectedAppointment.guardian || "No especificado"}</p>
-                    </div>
-
-                    {/* Obtenemos la información de contacto del paciente */}
-                    {(() => {
-                      const patients = storage.getItem("patients") || []
-                      const patient = patients.find((p: any) => p.id.toString() === selectedAppointment.patientId)
-
-                      if (patient) {
-                        return (
-                          <>
-                            {patient.phone && (
-                              <div>
-                                <Label className="font-semibold">Teléfono principal:</Label>
-                                <p>{patient.phone}</p>
-                              </div>
-                            )}
-                            {patient.additionalPhones && patient.additionalPhones.length > 0 && (
-                              <div>
-                                <Label className="font-semibold">Teléfono adicional:</Label>
-                                <p>{patient.additionalPhones.join(", ")}</p>
-                              </div>
-                            )}
-                            {patient.email && (
-                              <div>
-                                <Label className="font-semibold">Correo electrónico:</Label>
-                                <p>{patient.email}</p>
-                              </div>
-                            )}
-                          </>
-                        )
-                      }
-                      return null
-                    })()}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setShowInfoDialog(false)}>
-              Cerrar
-            </Button>
-            {selectedAppointment && !selectedAppointment.confirmed && (
-              <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={handleConfirmAppointment}>
-                Confirmar Cita
-              </Button>
-            )}
-            <Button
-              variant="default"
-              onClick={() => {
-                setShowInfoDialog(false)
-                setSelectedAppointment(selectedAppointment)
-                setShowEditAppointmentDialog(true)
-              }}
-            >
-              Editar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (selectedAppointment) {
-                  handleCancelAppointment(selectedAppointment.id)
-                  setShowInfoDialog(false)
-                }
-              }}
-            >
-              Cancelar Cita
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Warning Dialog */}
-      <WarningDialog />
-
-      {/* Time Passed Warning Dialog */}
-      <TimePassedWarningDialog />
     </div>
   )
 }
