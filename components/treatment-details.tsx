@@ -53,6 +53,12 @@ export function TreatmentDetails({ treatment, patient, open, onOpenChange, onUpd
   const [fingerprintError, setFingerprintError] = useState<string | null>(null)
   const [showTermsDialog, setShowTermsDialog] = useState(false)
 
+  // --- NUEVO: Estados para flujo de huella y polling ---
+  const [selectedTutorId, setSelectedTutorId] = useState<number | null>(null)
+  const [selectedFinger, setSelectedFinger] = useState<string>("pulgar_derecho")
+  const [taskId, setTaskId] = useState<number | null>(null)
+  const [isPolling, setIsPolling] = useState(false)
+
   // Cargar los datos del tratamiento cuando se abre el modal
   useEffect(() => {
     if (treatment && open) {
@@ -361,6 +367,110 @@ export function TreatmentDetails({ treatment, patient, open, onOpenChange, onUpd
     approvedDate = format(approvalDate, "d 'de' MMMM, yyyy HH:mm", { locale: es })
   }
 
+  // --- NUEVO: Polling para verificar tarea de huella ---
+  const pollFingerprintTask = (taskId: number) => {
+    let attempts = 0
+    const maxAttempts = 15 // 30 segundos si el intervalo es 2s
+    const interval = setInterval(async () => {
+      attempts++
+      try {
+        const res = await fetch(`/api/huellas?task_id=${taskId}`)
+        const data = await res.json()
+        if (data.success && data.completed) {
+          clearInterval(interval)
+          setIsPolling(false)
+          await approveTreatmentWithFingerprint(data.resultado)
+        } else if (data.success && data.failed) {
+          clearInterval(interval)
+          setIsPolling(false)
+          toast({ title: "Error", description: data.resultado || "La verificación de huella falló", variant: "destructive" })
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval)
+          setIsPolling(false)
+          toast({ title: "Error", description: "No se recibió respuesta", variant: "destructive" })
+        }
+      } catch {
+        clearInterval(interval)
+        setIsPolling(false)
+        toast({ title: "Error", description: "Error al verificar la tarea de huella", variant: "destructive" })
+      }
+    }, 2000)
+  }
+
+  // --- NUEVO: Función para aprobar tratamiento en backend y refrescar desde backend ---
+  const approveTreatmentWithFingerprint = async (hash: string) => {
+    if (!treatment || !selectedTutorId) {
+      console.error("Faltan datos para aprobar tratamiento", { treatment, selectedTutorId });
+      toast({ title: "Error", description: "Faltan datos para aprobar tratamiento", variant: "destructive" });
+      return;
+    }
+    try {
+      // Enviar POST al backend con todos los datos requeridos
+      const body = {
+        id: treatment.id,
+        estado: "aprobado",
+        aprobacion: hash,
+        aprobado_por_idtutor: selectedTutorId,
+        fecha_aprobado: new Date().toISOString(),
+        tratamiento_aprobado: selectedTreatmentType,
+        total_convencional: conventionalTotal,
+        total_recomendado: recommendedTotal,
+      };
+      console.log("POST /api/tratamientos/[id]/aprobar", body);
+      const res = await fetch(`/api/tratamientos/${treatment.id}/aprobar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast({ title: "Éxito", description: `Tratamiento aprobado correctamente (filas afectadas: ${data.affectedRows})`, variant: "success" });
+        setShowApprovalDialog(false);
+        onUpdate();
+        onOpenChange(false);
+      } else {
+        console.error("Error POST /api/tratamientos/[id]/aprobar", data);
+        toast({ title: "Error", description: data.error || "No se pudo aprobar el tratamiento", variant: "destructive" });
+      }
+    } catch (e: any) {
+      console.error("Error en approveTreatmentWithFingerprint", e);
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  }
+
+  // --- NUEVO: Función para iniciar tarea de huella ---
+  const startFingerprintApproval = async () => {
+    if (!patient || !treatment) return
+    if (!selectedTutorId) {
+      toast({ title: "Selecciona un tutor", variant: "destructive" })
+      return
+    }
+    setIsPolling(true)
+    try {
+      const res = await fetch("/api/huellas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tutor_id: selectedTutorId,
+          dedo: selectedFinger,
+          tipo: "comparacion",
+          id_tratamiento: treatment.id,
+        }),
+      })
+      const data = await res.json()
+      if (data.success && data.task_id) {
+        setTaskId(data.task_id)
+        pollFingerprintTask(data.task_id)
+      } else {
+        setIsPolling(false)
+        toast({ title: "Error", description: data.error || "No se pudo iniciar la tarea de huella", variant: "destructive" })
+      }
+    } catch (e: any) {
+      setIsPolling(false)
+      toast({ title: "Error", description: e.message, variant: "destructive" })
+    }
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -560,62 +670,50 @@ export function TreatmentDetails({ treatment, patient, open, onOpenChange, onUpd
 
       {/* Approval Dialog */}
       <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
-        <DialogContent className="sm:max-w-[450px] w-[95vw]">
+        <DialogContent className="sm:max-w-[450px] w-[95vw] bg-white dark:bg-[#18181b] border border-border text-foreground">
           <DialogHeader>
-            <DialogTitle className="section-title">Aprobar Tratamiento</DialogTitle>
-            <DialogDescription>
-              Seleccione el tipo de tratamiento a aprobar y capture la huella digital del tutor
+            <DialogTitle className="section-title">Captura de Huella Digital</DialogTitle>
+            <DialogDescription className="text-gray-700 dark:text-gray-200">
+              Seleccione el tipo de tratamiento, tutor y coloque el dedo indicado en el lector, luego haga clic en 'Iniciar captura'.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Seleccione el tratamiento a aprobar</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <Button
-                  variant={selectedTreatmentType === "conventional" ? "default" : "outline"}
-                  onClick={() => setSelectedTreatmentType("conventional")}
-                  className="w-full h-9 text-sm"
-                >
-                  Convencional (${conventionalTotal.toLocaleString()})
-                </Button>
-                <Button
-                  variant={selectedTreatmentType === "recommended" ? "default" : "outline"}
-                  onClick={() => setSelectedTreatmentType("recommended")}
-                  className="w-full h-9 text-sm"
-                >
-                  Recomendado (${recommendedTotal.toLocaleString()})
-                </Button>
-              </div>
+              <Label>Tipo de tratamiento</Label>
+              <select
+                className="w-full border rounded p-2 bg-white dark:bg-[#23272f] text-foreground border-border focus:outline-none"
+                value={selectedTreatmentType}
+                onChange={e => setSelectedTreatmentType(e.target.value as any)}
+              >
+                <option value="conventional">Convencional</option>
+                <option value="recommended">Recomendado</option>
+              </select>
             </div>
-
-            <FingerprintCapture onCapture={handleFingerprintCapture} />
-
-            {fingerprintError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error de verificación</AlertTitle>
-                <AlertDescription>{fingerprintError}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Agregar términos y condiciones aquí */}
-            <div className="mt-4 text-center">
-              <Button variant="link" className="text-primary underline" onClick={() => setShowTermsDialog(true)}>
-                Leer términos y condiciones
-              </Button>
+            <div className="space-y-2">
+              <Label>Seleccione el tutor</Label>
+              <select className="w-full border rounded p-2 bg-white dark:bg-[#23272f] text-foreground border-border focus:outline-none" value={selectedTutorId || ''} onChange={e => setSelectedTutorId(Number(e.target.value))}>
+                <option value="">Seleccionar tutor...</option>
+                {patient?.tutors?.map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                ))}
+              </select>
             </div>
+            <div className="space-y-2">
+              <Label>Seleccione el dedo</Label>
+              <select className="w-full border rounded p-2 bg-white dark:bg-[#23272f] text-foreground border-border focus:outline-none" value={selectedFinger} onChange={e => setSelectedFinger(e.target.value)}>
+                <option value="pulgar_derecho">Pulgar derecho</option>
+                <option value="indice_derecho">Índice derecho</option>
+                <option value="pulgar_izquierdo">Pulgar izquierdo</option>
+                <option value="indice_izquierdo">Índice izquierdo</option>
+              </select>
+            </div>
+            <Button onClick={startFingerprintApproval} disabled={isPolling || !selectedTutorId} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+              {isPolling ? "Esperando verificación..." : "Iniciar captura"}
+            </Button>
           </div>
-
           <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setShowApprovalDialog(false)} className="w-full sm:w-auto">
               Cancelar
-            </Button>
-            <Button
-              onClick={handleApprove}
-              disabled={!fingerprintData || !!fingerprintError}
-              className="w-full sm:w-auto"
-            >
-              Confirmar Aprobación
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, FileText, Calendar, Filter, PlusCircle, X, FilePlus, ArrowUp, ArrowDown, History, Stethoscope, FolderArchive, TableCellsMerge, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Search, FileText, Calendar, Filter, PlusCircle, X, FilePlus, ArrowUp, ArrowDown, History, Stethoscope, FolderArchive, TableCellsMerge, ChevronLeft, ChevronRight, Fingerprint } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,9 @@ import { parseISO } from "date-fns"
 import { usePatient } from "@/components/patient-context"
 import { AlertCircle } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import TutorModal from "@/components/tutor/TutorModal"
+import PatientTreatmentsSection from "@/components/PatientTreatmentsSection"
+import EditMedicalHistoryDialog from "@/components/EditMedicalHistoryDialog"
 
 interface Patient {
   id: number
@@ -118,6 +121,8 @@ export default function PacientesPage() {
   const [showAdditionalInfoDialog, setShowAdditionalInfoDialog] = useState(false)
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
   const [showFilterDialog, setShowFilterDialog] = useState(false)
+  const [showTutorModal, setShowTutorModal] = useState(false)
+  const [selectedTutorPatient, setSelectedTutorPatient] = useState<Patient | null>(null)
   // Reemplazar la definición del estado de filtros
   const [ageFilter, setAgeFilter] = useState<number | "">("")
   const [guardianFilter, setGuardianFilter] = useState("")
@@ -199,6 +204,15 @@ export default function PacientesPage() {
   const [totalPatients, setTotalPatients] = useState(0)
   const pageSize = 10
   const isInitialRender = useRef(true)
+  const [isSavingTreatment, setIsSavingTreatment] = useState(false)
+
+  // Estado para el ID del tratamiento en aprobación
+  const [approvalTreatmentId, setApprovalTreatmentId] = useState<number | null>(null)
+
+  // Estados para citas y tratamientos del historial
+  const [historyAppointments, setHistoryAppointments] = useState<any[]>([])
+  const [historyTreatments, setHistoryTreatments] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   const totalFiltered = useMemo(() => {
     let filtered = patients
@@ -490,17 +504,13 @@ export default function PacientesPage() {
       orthodonticReason: editPatientInfo.orthodonticReason || "",
       biteProblems: editPatientInfo.biteProblems || "",
       dentalComments: editPatientInfo.dentalComments || "",
-
-      // Interrogatorio por aparatos y sistemas
       systems: editPatientInfo.systems || {},
-
-      // Exploración física y regional
+      oralExploration: editPatientInfo.oralExploration || {},
       bloodPressure: editPatientInfo.bloodPressure || "",
       respiratoryRate: editPatientInfo.respiratoryRate || "",
       pulse: editPatientInfo.pulse || "",
       temperature: editPatientInfo.temperature || "",
       regionalObservations: editPatientInfo.regionalObservations || "",
-      oralExploration: editPatientInfo.oralExploration || {},
       specialObservations: editPatientInfo.specialObservations || "",
 
       // Información adicional (para mantener compatibilidad)
@@ -569,50 +579,102 @@ export default function PacientesPage() {
     setRecommendedTotal(rTotal)
   }
 
-  // Modificar la función handleSaveTreatment para guardar la fecha y hora correctamente
-  const handleSaveTreatment = (approved = false) => {
-    if (!selectedPatient) return
+  // Modificar la función handleSaveTreatment para guardar en la base de datos
+  const handleSaveTreatment = async (approved = false) => {
+    if (!selectedPatient || isSavingTreatment) return;
+    setIsSavingTreatment(true);
+    // Prepara los detalles en el formato esperado por la API
+    const detalles = currentTreatmentRows.map(row => ({
+      organo_dentario: row.toothNumber,
+      tratamiento_convencional: row.conventionalTreatment,
+      tratamiento_recomendado: row.recommendedTreatment,
+      precio_convencional: row.conventionalPrice,
+      precio_recomendado: row.recommendedPrice,
+    }));
 
-    const treatments = storage.getItem("treatments") || []
+    const body = {
+      id_paciente: selectedPatient.id,
+      total_convencional: conventionalTotal,
+      total_recomendado: recommendedTotal,
+      detalles,
+    };
 
-    // Usar new Date().toISOString() para guardar la fecha y hora exactas
-    const now = new Date()
-
-    const newTreatment: Treatment = {
-      id: treatments.length > 0 ? Math.max(...treatments.map((t: Treatment) => t.id)) + 1 : 1,
-      patientId: selectedPatient.id,
-      date: now.toISOString(), // Guardar como ISO string para evitar problemas de zona horaria
-      rows: currentTreatmentRows,
-      conventionalTotal,
-      recommendedTotal,
-      status: approved ? "approved" : "pending",
-      ...(approved && {
-        approvedType: selectedTreatmentType,
-        fingerprintData,
-        approvedDate: now.toISOString(),
-      }),
+    try {
+      const res = await fetch("/api/tratamientos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast({
+          title: "Éxito",
+          description: "Tratamiento guardado correctamente",
+          variant: "success",
+          duration: 2500,
+        });
+        setShowTreatmentDialog(false);
+        // Aquí puedes refrescar la lista de tratamientos si lo deseas
+      } else {
+        throw new Error(data.error || "Error al guardar tratamiento");
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+        duration: 2500,
+      });
+    } finally {
+      setIsSavingTreatment(false);
     }
-
-    const updatedTreatments = [...treatments, newTreatment]
-    storage.setItem("treatments", updatedTreatments)
-
-    if (approved) {
-      setShowApprovalDialog(false)
-    }
-    setShowTreatmentDialog(false)
-
-    toast({
-      title: "Éxito",
-      description: `Tratamiento ${approved ? "aprobado" : "guardado"} correctamente`,
-      variant: "success",
-      duration: 2500,
-    })
-  }
+  };
 
   // Modificar la función handleApprovalRequest para quitar las validaciones
-  const handleApprovalRequest = () => {
-    setFingerprintData(null)
-    setShowApprovalDialog(true)
+  const handleApprovalRequest = async () => {
+    if (!selectedPatient || isSavingTreatment) return;
+    setIsSavingTreatment(true);
+    setFingerprintData(null);
+    // Guardar tratamiento como pendiente
+    const detalles = currentTreatmentRows.map(row => ({
+      organo_dentario: row.toothNumber,
+      tratamiento_convencional: row.conventionalTreatment,
+      tratamiento_recomendado: row.recommendedTreatment,
+      precio_convencional: row.conventionalPrice,
+      precio_recomendado: row.recommendedPrice,
+    }));
+    const body = {
+      id_paciente: selectedPatient.id,
+      total_convencional: conventionalTotal,
+      total_recomendado: recommendedTotal,
+      detalles,
+    };
+    try {
+      const res = await fetch("/api/tratamientos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        // Buscar el último tratamiento pendiente del paciente
+        const resTrat = await fetch(`/api/tratamientos?paciente_id=${selectedPatient.id}&estado=pendiente&limit=1&sort=desc`);
+        const dataTrat = await resTrat.json();
+        const lastTreatment = Array.isArray(dataTrat) ? dataTrat[0] : (dataTrat.tratamientos?.[0] || null);
+        if (lastTreatment && lastTreatment.id) {
+          setApprovalTreatmentId(lastTreatment.id);
+          setShowApprovalDialog(true);
+        } else {
+          toast({ title: "Error", description: "No se pudo obtener el ID del tratamiento recién guardado", variant: "destructive", duration: 2500 });
+        }
+      } else {
+        throw new Error(data.error || "Error al guardar tratamiento");
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive", duration: 2500 });
+    } finally {
+      setIsSavingTreatment(false);
+    }
   }
 
   // Agregar esta función para manejar el clic en un tratamiento
@@ -644,16 +706,16 @@ export default function PacientesPage() {
     setShowHistoryDialog(true)
   }
 
-  const handleScheduleAppointment = (patientId: number) => {
+  const handleScheduleAppointment = (patientId: number, patientName: string) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('selectedPatientId', String(patientId))
+      sessionStorage.setItem('selectedPatientName', patientName)
+    }
     // Trigger loading animation
     const startEvent = new Event("next-route-change-start")
     document.dispatchEvent(startEvent)
-
-    // Navigate after a short delay
     setTimeout(() => {
-      router.push(`/citas?patient=${patientId}`)
-
-      // Complete the loading animation after navigation
+      router.push(`/citas`)
       setTimeout(() => {
         const completeEvent = new Event("next-route-change-complete")
         document.dispatchEvent(completeEvent)
@@ -900,6 +962,43 @@ export default function PacientesPage() {
     setFingerprintData(data)
   }
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage.getItem('openNewPatientModal') === '1') {
+        setShowNewPatientDialog(true)
+        window.localStorage.removeItem('openNewPatientModal')
+      }
+    }
+  }, [])
+
+  // Cargar citas y tratamientos del paciente seleccionado al abrir el historial
+  useEffect(() => {
+    if (showHistoryDialog && selectedPatient) {
+      setLoadingHistory(true)
+      Promise.all([
+        fetch(`/api/citas/paciente?paciente_id=${selectedPatient.id}`).then(r => r.json()),
+        fetch(`/api/tratamientos/paciente?paciente_id=${selectedPatient.id}`).then(r => r.json()),
+      ])
+        .then(([citasRes, tratamientosRes]) => {
+          setHistoryAppointments(Array.isArray(citasRes.citas) ? citasRes.citas : [])
+          setHistoryTreatments(Array.isArray(tratamientosRes.tratamientos) ? tratamientosRes.tratamientos : [])
+        })
+        .finally(() => setLoadingHistory(false))
+    } else if (!showHistoryDialog) {
+      setHistoryAppointments([])
+      setHistoryTreatments([])
+    }
+  }, [showHistoryDialog, selectedPatient])
+
+  // Navegar a la página de citas y abrir el modal de confirmación
+  const handleGoToConfirmAppointment = (appointment: any) => {
+    setShowAppointmentDetails(false)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('selectedAppointmentId', appointment.id.toString())
+    }
+    router.push('/citas')
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -925,7 +1024,10 @@ export default function PacientesPage() {
                 placeholder="Buscar por nombre o tutor..."
                 className="pl-8"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setPage(0) // Ir a la primera página al buscar
+                }}
               />
             </div>
             <Button variant="outline" onClick={() => setShowFilterDialog(true)}>
@@ -1026,7 +1128,7 @@ export default function PacientesPage() {
                             variant="outline"
                             size="icon"
                             title="Agendar Cita"
-                            onClick={() => handleScheduleAppointment(patient.id)}
+                            onClick={() => handleScheduleAppointment(patient.id, patient.name)}
                           >
                             <Calendar className="h-4 w-4" />
                           </Button>
@@ -1069,6 +1171,18 @@ export default function PacientesPage() {
                               <FolderArchive className="h-4 w-4" />
                             </Button>
                           )}
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            title="Registrar Tutor"
+                            onClick={() => {
+                              setSelectedTutorPatient(patient)
+                              setShowTutorModal(true)
+                            }}
+                          >
+                            <Fingerprint className="h-4 w-4" />
+                            <span className="sr-only">Registrar Tutor</span>
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1260,7 +1374,7 @@ export default function PacientesPage() {
                     <strong>Tutor:</strong> {selectedPatient.guardian}
                   </p>
                   <p>
-                    <strong>Última visita:</strong> {selectedPatient.lastVisit}
+                    <strong>Última visita:</strong> {selectedPatient.lastVisit ? format(new Date(selectedPatient.lastVisit), "d 'de' MMMM, yyyy h:mm a", { locale: es }) : "-"}
                   </p>
 
                   {selectedPatient.phone && (
@@ -1668,6 +1782,7 @@ export default function PacientesPage() {
                                   </p>
                                 ),
                             )}
+
                           </div>
 
                           {selectedPatient.medicalInfo.specialObservations && (
@@ -1683,127 +1798,86 @@ export default function PacientesPage() {
                   </div>
                 )}
                 <h4 className="font-semibold mt-4 section-title">Historial de Citas</h4>
-                {(() => {
-                  if (!selectedPatient) return <p>No hay citas registradas.</p>
-
-                  const appointments = (storage.getItem("appointments") || [])
-                    .filter((a: any) => a.patientId === selectedPatient.id.toString())
-                    .sort((a: any, b: any) => {
-                      const dateA = parseISO(`${a.date}T${a.time}`)
-                      const dateB = parseISO(`${b.date}T${b.time}`)
-                      return dateB.getTime() - dateA.getTime() // Orden descendente (más reciente primero)
-                    })
-
-                  if (appointments.length === 0) {
-                    return <p>No hay citas registradas.</p>
-                  }
-
-                  return (
-                    <div className="space-y-2">
-                      {appointments.map((appointment: any) => {
-                        const appointmentDate = parseISO(`${appointment.date}T${appointment.time}`)
-                        const formattedDate = format(appointmentDate, "d 'de' MMMM, yyyy", { locale: es })
-                        const formattedTime = format(appointmentDate, "HH:mm", { locale: es })
-
-                        return (
-                          <div
-                            key={appointment.id}
-                            className="border rounded-lg p-3 flex justify-between items-center cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => handleAppointmentClick(appointment)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                  appointment.confirmed ? "bg-green-200 text-green-600" : "bg-blue-200 text-blue-600"
-                                }`}
-                              >
-                                <Calendar className="h-4 w-4" />
-                              </div>
-                              <div>
-                                <p className="font-medium">{appointment.type || "Consulta general"}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formattedDate} - {formattedTime}
-                                </p>
-                              </div>
+                {loadingHistory ? (
+                  <p className="text-muted-foreground">Cargando citas...</p>
+                ) : historyAppointments.length === 0 ? (
+                  <p>No hay citas registradas.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyAppointments.map((appointment: any) => {
+                      const dateObj = new Date(appointment.fecha_hora)
+                      const formattedDate = format(dateObj, "d 'de' MMMM, yyyy", { locale: es })
+                      const formattedTime = format(dateObj, "h:mm a", { locale: es })
+                      let estadoBadge = null
+                      if (appointment.estado === "cancelada") {
+                        estadoBadge = <span className="text-xs px-2 py-1 bg-red-100 text-red-800 rounded-full">Cancelada</span>
+                      } else if (appointment.estado === "confirmada") {
+                        estadoBadge = <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Confirmada</span>
+                      } else {
+                        estadoBadge = <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">Pendiente</span>
+                      }
+                      return (
+                        <div
+                          key={appointment.id}
+                          className="border rounded-lg p-3 flex justify-between items-center cursor-pointer hover:bg-muted/50 transition-colores"
+                          onClick={() => handleAppointmentClick(appointment)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${appointment.estado === "confirmada" ? "bg-green-200 text-green-600" : appointment.estado === "cancelada" ? "bg-red-200 text-red-600" : "bg-blue-200 text-blue-600"}`}>
+                              <Calendar className="h-4 w-4" />
                             </div>
                             <div>
-                              {appointment.confirmed ? (
-                                <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
-                                  Confirmada
-                                </span>
-                              ) : (
-                                <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">
-                                  Pendiente
-                                </span>
-                              )}
+                              <p className="font-medium">{appointment.tipo || "Consulta general"}</p>
+                              <p className="text-xs text-muted-foreground">{formattedDate} - {formattedTime}</p>
                             </div>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
+                          <div>
+                            {estadoBadge}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
 
                 <h4 className="font-semibold mt-4 section-title">Historial de Tratamientos</h4>
-                {(() => {
-                  if (!selectedPatient) return <p>No hay tratamientos registrados.</p>
-
-                  const treatments = (storage.getItem("treatments") || [])
-                    .filter((t: any) => t.patientId === selectedPatient.id)
-                    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-                  if (treatments.length === 0) {
-                    return <p>No hay tratamientos registrados.</p>
-                  }
-
-                  return (
-                    <div className="space-y-2">
-                      {treatments.map((treatment: any) => {
-                        // Usar la fecha guardada directamente
-                        const treatmentDate = new Date(treatment.date)
-                        const formattedDate = format(treatmentDate, "d 'de' MMMM, yyyy", { locale: es })
-                        const formattedTime = format(treatmentDate, "HH:mm", { locale: es })
-
-                        return (
-                          <div
-                            key={treatment.id}
-                            className="border rounded-lg p-3 flex justify-between items-center cursor-pointer hover:bg-muted/50 transition-colors"
-                            onClick={() => handleTreatmentClick(treatment)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                  treatment.status === "approved"
-                                    ? "bg-green-200 text-green-600"
-                                    : "bg-amber-200 text-amber-600"
-                                }`}
-                              >
-                                <FileText className="h-4 w-4" />
-                              </div>
-                              <div>
-                                <p className="font-medium">Tratamiento</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formattedDate} - {formattedTime}
-                                </p>
-                              </div>
+                {loadingHistory ? (
+                  <p className="text-muted-foreground">Cargando tratamientos...</p>
+                ) : historyTreatments.length === 0 ? (
+                  <p>No hay tratamientos registrados.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {historyTreatments.map((treatment: any) => {
+                      const dateObj = new Date(treatment.fecha_creacion)
+                      const formattedDate = format(dateObj, "d 'de' MMMM, yyyy", { locale: es })
+                      const formattedTime = format(dateObj, "HH:mm", { locale: es })
+                      return (
+                        <div
+                          key={treatment.id}
+                          className="border rounded-lg p-3 flex justify-between items-center cursor-pointer hover:bg-muted/50 transition-colores"
+                          onClick={() => handleTreatmentClick(treatment)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${treatment.estado === "aprobado" ? "bg-green-200 text-green-600" : "bg-amber-200 text-amber-600"}`}>
+                              <FileText className="h-4 w-4" />
                             </div>
                             <div>
-                              {treatment.status === "approved" ? (
-                                <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">
-                                  Aprobado
-                                </span>
-                              ) : (
-                                <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">
-                                  Pendiente
-                                </span>
-                              )}
+                              <p className="font-medium">Tratamiento</p>
+                              <p className="text-xs text-muted-foreground">{formattedDate} - {formattedTime}</p>
                             </div>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })()}
+                          <div>
+                            {treatment.estado === "aprobado" ? (
+                              <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded-full">Aprobado</span>
+                            ) : (
+                              <span className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded-full">Pendiente</span>
+                            )}
+                          </div>
+                        </div>
+                                           )
+                    })}
+                  </div>
+                )}
               </div>
             </ScrollArea>
           )}
@@ -1814,841 +1888,21 @@ export default function PacientesPage() {
       </Dialog>
 
       {/* Additional Info Dialog */}
-      {/* Reemplazar el Dialog de información adicional con este código actualizado */}
-      <Dialog open={showAdditionalInfoDialog} onOpenChange={setShowAdditionalInfoDialog}>
-        <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] overflow-hidden">
-          <DialogHeader className="px-6 pt-6">
-            <DialogTitle className="text-2xl font-bold text-primary">
-              {selectedPatient && `Editar historial médico para ${selectedPatient.name}`}
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[calc(95vh-12rem)] px-6">
-            <div className="space-y-8 py-4 pr-4">
-              {/* 1. Ficha de Identificación */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Ficha de Identificación</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-name">Nombre</Label>
-                    <Input
-                      id="edit-name"
-                      value={editPatientInfo.name}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, name: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-age">Edad</Label>
-                    <select
-                      id="edit-age"
-                      value={editPatientInfo.age || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, age: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar edad</option>
-                      {Array.from({ length: 150 }, (_, i) => i + 1).map((age) => (
-                        <option key={age} value={age.toString()}>
-                          {age} años
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-sex">Sexo</Label>
-                    <select
-                      id="edit-sex"
-                      value={editPatientInfo.sex || ""}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setEditPatientInfo({
-                          ...editPatientInfo,
-                          sex: value,
-                          otherSex: value === "otro" ? editPatientInfo.otherSex || "" : "",
-                        })
-                      }}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      <option value="masculino">Masculino</option>
-                      <option value="femenino">Femenino</option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-
-                  {editPatientInfo.sex === "otro" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-other-sex">Especificar</Label>
-                      <Input
-                        id="edit-other-sex"
-                        value={editPatientInfo.otherSex || ""}
-                        onChange={(e) => setEditPatientInfo({ ...editPatientInfo, otherSex: e.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-birthdate">Fecha de nacimiento</Label>
-                    <Input
-                      id="edit-birthdate"
-                      type="date"
-                      value={editPatientInfo.birthdate || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, birthdate: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-nationality">Nacionalidad</Label>
-                    <Input
-                      id="edit-nationality"
-                      value={editPatientInfo.nationality || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, nationality: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-occupation">Ocupación</Label>
-                    <Input
-                      id="edit-occupation"
-                      value={editPatientInfo.occupation || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, occupation: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-doctor">Médico tratante</Label>
-                    <Input
-                      id="edit-doctor"
-                      value={editPatientInfo.doctor || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, doctor: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-origin">Lugar de origen</Label>
-                    <Input
-                      id="edit-origin"
-                      value={editPatientInfo.origin || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, origin: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-residence">Lugar de residencia</Label>
-                    <Input
-                      id="edit-residence"
-                      value={editPatientInfo.residence || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, residence: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-address">Domicilio</Label>
-                    <Input
-                      id="edit-address"
-                      value={editPatientInfo.address || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, address: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-religion">Religión</Label>
-                    <Input
-                      id="edit-religion"
-                      value={editPatientInfo.religion || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, religion: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-email">Correo electrónico</Label>
-                    <Input
-                      id="edit-email"
-                      type="email"
-                      value={editPatientInfo.email || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, email: e.target.value })}
-                      placeholder="ejemplo@correo.com"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-phone" className="flex items-center">
-                      Teléfono <AlertCircle className="h-4 w-4 ml-1 text-amber-500" />
-                    </Label>
-                    <Input
-                      id="edit-phone"
-                      value={editPatientInfo.phone || ""}
-                      onChange={(e) => handleEditPhoneInput(e)}
-                      placeholder="10 dígitos"
-                      maxLength={10}
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-guardian">Padre o Tutor</Label>
-                    <Input
-                      id="edit-guardian"
-                      value={editPatientInfo.guardian || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, guardian: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-birth-weight">Peso al nacer (kg)</Label>
-                    <Input
-                      id="edit-birth-weight"
-                      type="number"
-                      step="0.01"
-                      value={editPatientInfo.birthWeight || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, birthWeight: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-birth-height">Talla al nacer (cm)</Label>
-                    <Input
-                      id="edit-birth-height"
-                      type="number"
-                      step="0.1"
-                      value={editPatientInfo.birthHeight || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, birthHeight: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-birth-type">Tipo de parto</Label>
-                    <select
-                      id="edit-birth-type"
-                      value={editPatientInfo.birthType || ""}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setEditPatientInfo({
-                          ...editPatientInfo,
-                          birthType: value,
-                          otherBirthType: value === "otro" ? editPatientInfo.otherBirthType ||"" : "",
-                        })
-                      }}
-                      className="flex h-10 w-full rounded-md border border-input bgbackground px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      <option value="natural">Natural</option>
-                      <option value="cesarea">Cesárea</option>
-                      <option value="otro">Otro</option>
-                    </select>
-                  </div>
-
-                  {editPatientInfo.birthType === "otro" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-other-birth-type">Especificar</Label>
-                      <Input
-                        id="edit-other-birth-type"
-                        value={editPatientInfo.otherBirthType || ""}
-                        onChange={(e) => setEditPatientInfo({ ...editPatientInfo, otherBirthType: e.target.value })}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-last-dental-exam">Fecha del último examen dental</Label>
-                    <Input
-                      id="edit-last-dental-exam"
-                      type="date"
-                      value={editPatientInfo.lastDentalExam || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, lastDentalExam: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-consultation-reason">Motivo de la consulta</Label>
-                    <Textarea
-                      id="edit-consultation-reason"
-                      value={editPatientInfo.consultationReason || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, consultationReason: e.target.value })}
-                      placeholder="Describa el motivo de la consulta"
-                      className="min-h-[80px]"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-treatment-interest">Interés del tratamiento</Label>
-                    <Textarea
-                      id="edit-treatment-interest"
-                      value={editPatientInfo.treatmentInterest || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, treatmentInterest: e.target.value })}
-                      placeholder="Describa el interés en el tratamiento"
-                      className="min-h-[80px]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. Antecedentes Heredo-familiares */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Antecedentes Heredo-familiares</h3>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      "Diabetes Mellitus",
-                      "Hipertensión",
-                      "Carcinomas",
-                      "Cardiopatías",
-                      "Hepatitis",
-                      "Nefropatías",
-                      "Enf. endocrinas",
-                      "Enf. Mentales",
-                      "Epilepsia",
-                      "Asma",
-                      "Enf. Hematológicas",
-                      "Sífilis",
-                      "No sabe",
-                    ].map((disease) => (
-                      <div key={disease} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`hereditary-${disease.toLowerCase().replace(/\s+/g, "-")}`}
-                          checked={editPatientInfo.hereditaryDiseases?.includes(disease) || false}
-                          onCheckedChange={(checked) => {
-                            const currentDiseases = editPatientInfo.hereditaryDiseases || []
-                            setEditPatientInfo({
-                              ...editPatientInfo,
-                              hereditaryDiseases: checked
-                                ? [...currentDiseases, disease]
-                                : currentDiseases.filter((d) => d !== disease),
-                            })
-                          }}
-                        />
-                        <Label
-                          htmlFor={`hereditary-${disease.toLowerCase().replace(/\s+/g, "-")}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {disease}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-other-hereditary">Otras enfermedades hereditarias</Label>
-                    <Textarea
-                      id="edit-other-hereditary"
-                      value={editPatientInfo.newHereditaryDisease || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, newHereditaryDisease: e.target.value })}
-                      placeholder="Escriba otras enfermedades hereditarias"
-                      className="min-h-[80px]"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-hereditary-notes">Notas adicionales</Label>
-                    <Textarea
-                      id="edit-hereditary-notes"
-                      value={editPatientInfo.hereditaryNotes || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, hereditaryNotes: e.target.value })}
-                      placeholder="Notas adicionales sobre antecedentes heredo-familiares"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Antecedentes No Patológicos */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Antecedentes No Patológicos</h3>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      "Cepillo desgastado",
-                      "Uso de hilo dental",
-                      "Uso de enjuague bucal",
-                      "Cepillado 3 veces al día",
-                      "Cepillado irregular",
-                    ].map((habit) => (
-                      <div key={habit} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`habit-${habit.toLowerCase().replace(/\s+/g, "-")}`}
-                          checked={editPatientInfo.personalHabits?.includes(habit) || false}
-                          onCheckedChange={(checked) => {
-                            const currentHabits = editPatientInfo.personalHabits || []
-                            setEditPatientInfo({
-                              ...editPatientInfo,
-                              personalHabits: checked
-                                ? [...currentHabits, habit]
-                                : currentHabits.filter((h) => h !== habit),
-                            })
-                          }}
-                        />
-                        <Label
-                          htmlFor={`habit-${habit.toLowerCase().replace(/\s+/g, "-")}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {habit}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-other-habit">Otros hábitos personales</Label>
-                    <Textarea
-                      id="edit-other-habit"
-                      value={editPatientInfo.newPersonalHabit || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, newPersonalHabit: e.target.value })}
-                      placeholder="Escriba otros hábitos personales"
-                      className="min-h-[80px]"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-housing-type">Tipo de habitación</Label>
-                      <Input
-                        id="edit-housing-type"
-                        value={editPatientInfo.housingType || ""}
-                        onChange={(e) => setEditPatientInfo({ ...editPatientInfo, housingType: e.target.value })}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-feeding">Alimentación</Label>
-                      <Input
-                        id="edit-feeding"
-                        value={editPatientInfo.feeding || ""}
-                        onChange={(e) => setEditPatientInfo({ ...editPatientInfo, feeding: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="edit-smoking"
-                          checked={editPatientInfo.smoking || false}
-                          onCheckedChange={(checked) => {
-                            setEditPatientInfo({
-                              ...editPatientInfo,
-                              smoking: !!checked,
-                            })
-                          }}
-                        />
-                        <Label htmlFor="edit-smoking">Tabaquismo</Label>
-                      </div>
-                      {editPatientInfo.smoking && (
-                        <Input
-                          type="date"
-                          value={editPatientInfo.smokingDate || ""}
-                          onChange={(e) => setEditPatientInfo({ ...editPatientInfo, smokingDate: e.target.value })}
-                          placeholder="Fecha de inicio"
-                        />
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="edit-alcohol"
-                          checked={editPatientInfo.alcohol || false}
-                          onCheckedChange={(checked) => {
-                            setEditPatientInfo({
-                              ...editPatientInfo,
-                              alcohol: !!checked,
-                            })
-                          }}
-                        />
-                        <Label htmlFor="edit-alcohol">Alcoholismo</Label>
-                      </div>
-                      {editPatientInfo.alcohol && (
-                        <Input
-                          type="date"
-                          value={editPatientInfo.alcoholDate || ""}
-                          onChange={(e) => setEditPatientInfo({ ...editPatientInfo, alcoholDate: e.target.value })}
-                          placeholder="Fecha de inicio"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="edit-immunization"
-                        checked={editPatientInfo.immunization || false}
-                        onCheckedChange={(checked) => {
-                          setEditPatientInfo({
-                            ...editPatientInfo,
-                            immunization: !!checked,
-                          })
-                        }}
-                      />
-                      <Label htmlFor="edit-immunization">Cartilla de inmunización completa</Label>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-hobbies">Pasatiempos</Label>
-                    <Textarea
-                      id="edit-hobbies"
-                      value={editPatientInfo.hobbies || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, hobbies: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-sexual-life">Vida sexual</Label>
-                    <select
-                      id="edit-sexual-life"
-                      value={editPatientInfo.sexualLife || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, sexualLife: e.target.value })}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      <option value="activa">Activa</option>
-                      <option value="no-activa">No activa</option>
-                      <option value="prefiere-no-decir">Prefiere no decir</option>
-                      <option value="no-aplica">No aplica (es menor)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4. Historial de Salud */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Historial de Salud</h3>
-
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      "Accidentes en la cara",
-                      "Operaciones en la cara",
-                      "Alergias",
-                      "Problemas de oído",
-                      "Problemas de nacimiento",
-                      "Problemas de sangrado",
-                      "Problemas de lenguaje",
-                      "Problemas de respiración",
-                      "Asma",
-                      "Anemia",
-                      "Problemas de amígdalas",
-                      "Diabetes",
-                      "Epilepsia",
-                      "Fiebre reumática",
-                      "Enfermedades del corazón",
-                      "Operación de amígdalas o adenoides",
-                      "Dificultad para masticar o deglutir",
-                      "Ronca al dormir",
-                      "Respira por la boca",
-                      "Chupa el dedo",
-                      "Se muerde el labio",
-                      "Se muerde las uñas",
-                      "Rechina los dientes",
-                      "Enfermedades de transmisión sexual",
-                    ].map((condition) => (
-                      <div key={condition} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`health-${condition.toLowerCase().replace(/\s+/g, "-")}`}
-                          checked={editPatientInfo.healthConditions?.includes(condition) || false}
-                          onCheckedChange={(checked) => {
-                            const currentConditions = editPatientInfo.healthConditions || []
-                            setEditPatientInfo({
-                              ...editPatientInfo,
-                              healthConditions: checked
-                                ? [...currentConditions, condition]
-                                : currentConditions.filter((c) => c !== condition),
-                            })
-                          }}
-                        />
-                        <Label
-                          htmlFor={`health-${condition.toLowerCase().replace(/\s+/g, "-")}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {condition}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="edit-orthodontic-consultation"
-                        checked={editPatientInfo.orthodonticConsultation || false}
-                        onCheckedChange={(checked) => {
-                          setEditPatientInfo({
-                            ...editPatientInfo,
-                            orthodonticConsultation: !!checked,
-                          })
-                        }}
-                      />
-                      <Label htmlFor="edit-orthodontic-consultation">
-                        ¿Ha tenido alguna vez una consulta de ortodoncia?
-                      </Label>
-                    </div>
-
-                    {editPatientInfo.orthodonticConsultation && (
-                      <div className="space-y-2 pl-6 mt-2">
-                        <Label htmlFor="edit-orthodontic-date">¿Cuándo?</Label>
-                        <Input
-                          id="edit-orthodontic-date"
-                          type="date"
-                          value={editPatientInfo.orthodonticDate || ""}
-                          onChange={(e) => setEditPatientInfo({ ...editPatientInfo, orthodonticDate: e.target.value })}
-                        />
-
-                        <Label htmlFor="edit-orthodontic-reason">¿Por qué? ¿Cuál fue el resultado?</Label>
-                        <Textarea
-                          id="edit-orthodontic-reason"
-                          value={editPatientInfo.orthodonticReason || ""}
-                          onChange={(e) =>
-                            setEditPatientInfo({ ...editPatientInfo, orthodonticReason: e.target.value })
-                          }
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-bite-problems">Problemas con la mordida o posición de los dientes</Label>
-                    <Textarea
-                      id="edit-bite-problems"
-                      value={editPatientInfo.biteProblems || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, biteProblems: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-dental-comments">Comentarios de terceros sobre problemas dentales</Label>
-                    <Textarea
-                      id="edit-dental-comments"
-                      value={editPatientInfo.dentalComments || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, dentalComments: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. Interrogatorio por Aparatos y Sistemas */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">
-                  Interrogatorio por Aparatos y Sistemas
-                </h3>
-
-                <div className="space-y-4">
-                  {[
-                    "Aparato digestivo",
-                    "Aparato cardiovascular",
-                    "Aparato respiratorio",
-                    "Aparato genito-urinario",
-                    "Sistema endocrino",
-                    "Sistema nervioso",
-                  ].map((system) => (
-                    <div key={system} className="space-y-2">
-                      <Label htmlFor={`edit-system-${system.toLowerCase().replace(/\s+/g, "-")}`}>{system}</Label>
-                      <Textarea
-                        id={`edit-system-${system.toLowerCase().replace(/\s+/g, "-")}`}
-                        value={editPatientInfo.systems?.[system] || ""}
-                        onChange={(e) => {
-                          const currentSystems = editPatientInfo.systems || {}
-                          setEditPatientInfo({
-                            ...editPatientInfo,
-                            systems: {
-                              ...currentSystems,
-                              [system]: e.target.value,
-                            },
-                          })
-                        }}
-                        placeholder={`Información sobre ${system.toLowerCase()}`}
-                        className="min-h-[80px]"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 6. Exploración Física y Regional */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Exploración Física y Regional</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-blood-pressure">Presión arterial</Label>
-                    <Input
-                      id="edit-blood-pressure"
-                      value={editPatientInfo.bloodPressure || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, bloodPressure: e.target.value })}
-                      placeholder="Ej: 120/80 mmHg"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-respiratory-rate">Frecuencia respiratoria</Label>
-                    <Input
-                      id="edit-respiratory-rate"
-                      type="number"
-                      value={editPatientInfo.respiratoryRate || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, respiratoryRate: e.target.value })}
-                      placeholder="Respiraciones por minuto"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-pulse">Pulso</Label>
-                    <Input
-                      id="edit-pulse"
-                      type="number"
-                      value={editPatientInfo.pulse || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, pulse: e.target.value })}
-                      placeholder="Latidos por minuto"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-temperature">Temperatura</Label>
-                    <Input
-                      id="edit-temperature"
-                      type="number"
-                      step="0.1"
-                      value={editPatientInfo.temperature || ""}
-                      onChange={(e) => setEditPatientInfo({ ...editPatientInfo, temperature: e.target.value })}
-                      placeholder="°C"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-weight">Peso (kg)</Label>
-                    <Input
-                      id="edit-weight"
-                      type="number"
-                      step="0.1"
-                      value={additionalInfo.weight || ""}
-                      onChange={(e) => setAdditionalInfo({ ...additionalInfo, weight: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-height">Talla (cm)</Label>
-                    <Input
-                      id="edit-height"
-                      type="number"
-                      step="0.1"
-                      value={additionalInfo.height || ""}
-                      onChange={(e) => setAdditionalInfo({ ...additionalInfo, height: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-regional-observations">Observaciones generales de la exploración regional</Label>
-                  <Textarea
-                    id="edit-regional-observations"
-                    value={editPatientInfo.regionalObservations || ""}
-                    onChange={(e) => setEditPatientInfo({ ...editPatientInfo, regionalObservations: e.target.value })}
-                    placeholder="Observaciones sobre cabeza, cuello, etc."
-                    className="min-h-[100px]"
-                  />
-                </div>
-              </div>
-
-              {/* 7. Exploración Oral */}
-              <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-primary border-b pb-2">Exploración Oral</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    "Higiene",
-                    "Periodonto",
-                    "Prevalencia de caries",
-                    "Dentición",
-                    "Dientes faltantes",
-                    "Dientes retenidos",
-                    "Dientes impactados",
-                    "Descalcificación de dientes",
-                    "Inserción de frenillos",
-                    "Labios",
-                    "Proporción lengua-arcos",
-                    "Problemas de lenguaje",
-                    "Terceros molares",
-                    "Hábitos",
-                    "Tipo de perfil",
-                    "Tipo de cráneo",
-                    "Tipo de cara",
-                    "Forma de las arcadas dentarias",
-                    "Forma del paladar",
-                  ].map((field) => (
-                    <div key={field} className="space-y-2">
-                      <Label htmlFor={`edit-oral-${field.toLowerCase().replace(/\s+/g, "-")}`}>{field}</Label>
-                      <Input
-                        id={`edit-oral-${field.toLowerCase().replace(/\s+/g, "-")}`}
-                        value={editPatientInfo.oralExploration?.[field] || ""}
-                        onChange={(e) => {
-                          const currentOralExploration = editPatientInfo.oralExploration || {}
-                          setEditPatientInfo({
-                            ...editPatientInfo,
-                            oralExploration: {
-                              ...currentOralExploration,
-                              [field]: e.target.value,
-                            },
-                          })
-                        }}
-                        className="focus:ring-0 focus:ring-offset-0"
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-special-observations">Observaciones especiales</Label>
-                  <Textarea
-                    id="edit-special-observations"
-                    value={editPatientInfo.specialObservations || ""}
-                    onChange={(e) => setEditPatientInfo({ ...editPatientInfo, specialObservations: e.target.value })}
-                    className="min-h-[100px] focus:ring-0 focus:ring-offset-0"
-                  />
-                </div>
-
-                {/* Agregar términos y condiciones aquí, justo después de Observaciones especiales */}
-                <div className="mt-6 text-center">
-                  <Button variant="link" className="text-primary underline" onClick={() => setShowTermsDialog(true)}>
-                    Leer términos y condiciones
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </ScrollArea>
-          <DialogFooter className="px-6 py-4 border-t flex justify-end gap-4">
-            <Button variant="outline" onClick={() => setShowAdditionalInfoDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleAddAdditionalInfo}>Guardar Historial Médico</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Terms and Conditions Dialog */}
-      <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="section-title">Términos y Condiciones</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm">
-              Certifico que toda la información proporcionada es correcta y que es mi responsabilidad informar sobre
-              cualquier cambio sobre mi salud. He sido informado acerca del diagnóstico y plan de tratamiento que
-              recibiré en la clínica de rehabilitación oral. Campus Xalapa, y reconozco las complicaciones que se puedan
-              presentar dichos procedimientos, por lo que no tengo dudas al respecto y autorizo al odontólogo tratante y
-              de esta forma para que efectúe los tratamientos que sean necesarios para el alivio y/o curar de los
-              padecimientos desde ahora y hasta el final de mi tratamiento.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowTermsDialog(false)}>Cerrar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditMedicalHistoryDialog
+        open={showAdditionalInfoDialog}
+        onOpenChange={setShowAdditionalInfoDialog}
+        selectedPatient={selectedPatient}
+        editPatientInfo={editPatientInfo}
+        setEditPatientInfo={setEditPatientInfo}
+        additionalInfo={additionalInfo}
+        setAdditionalInfo={setAdditionalInfo}
+               handleAddAdditionalInfo={handleAddAdditionalInfo}
+        showTermsDialog={showTermsDialog}
+        setShowTermsDialog={setShowTermsDialog}
+        addEditPhoneField={addEditPhoneField}
+        removeEditPhoneField={removeEditPhoneField}
+        handleEditPhoneInput={handleEditPhoneInput}
+      />
 
       {/* Filter Dialog */}
       <Dialog open={showFilterDialog} onOpenChange={setShowFilterDialog}>
@@ -2692,109 +1946,36 @@ export default function PacientesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Treatment Dialog */}
-      <Dialog open={showTreatmentDialog} onOpenChange={setShowTreatmentDialog}>
-        <DialogContent className="sm:max-w-[900px] w-[95vw] max-h-[90vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="section-title">Realizar Tratamiento</DialogTitle>
-            <DialogDescription>
-              {selectedPatient && `Crear plan de tratamiento para ${selectedPatient.name}`}
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="max-h-[calc(90vh-180px)]">
-            <div className="space-y-6 p-1">
-              <div className="bg-muted/30 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold text-primary mb-3 border-b pb-1">Información del Paciente</h3>
-                {selectedPatient && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p>
-                        <strong>Paciente:</strong> {selectedPatient.name}
-                      </p>
-                      <p>
-                        <strong>Edad:</strong> {selectedPatient.age} años
-                      </p>
-                      <p>
-                        <strong>Tutor:</strong> {selectedPatient.guardian}
-                      </p>
-                    </div>
-                    <div>
-                      <p>
-                        <strong>Fecha:</strong> {format(new Date(), "d 'de' MMMM, yyyy", { locale: es })}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="text-lg font-semibold text-primary mb-3 border-b pb-1">Plan de Tratamiento</h3>
-                <TreatmentTable onUpdate={handleTreatmentUpdateRows} />
-              </div>
-            </div>
-          </ScrollArea>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowTreatmentDialog(false)} className="w-full sm:w-auto">
-              Cancelar
-            </Button>
-            <Button onClick={() => handleSaveTreatment(false)} className="w-full sm:w-auto">
-              Guardar Tratamiento
-            </Button>
-            <Button onClick={handleApprovalRequest} className="w-full sm:w-auto bg-green-600 hover:bg-green-700">
-              Aprobar Tratamiento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approval Dialog */}
-      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
-        <DialogContent className="sm:max-w-[450px] w-[95vw]">
-          <DialogHeader>
-            <DialogTitle className="section-title">Aprobar Tratamiento</DialogTitle>
-            <DialogDescription>
-              Seleccione el tipo de tratamiento a aprobar y capture la huella digital del tutor
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Seleccione el tratamiento a aprobar</Label>
-              <div className="grid grid-cols-2 gap-4">
-                <Button
-                  variant={selectedTreatmentType === "conventional" ? "default" : "outline"}
-                  onClick={() => setSelectedTreatmentType("conventional")}
-                  className="w-full h-9 text-sm"
-                >
-                  Convencional (${conventionalTotal.toLocaleString()})
-                </Button>
-                <Button
-                  variant={selectedTreatmentType === "recommended" ? "default" : "outline"}
-                  onClick={() => setSelectedTreatmentType("recommended")}
-                  className="w-full h-9 text-sm"
-                >
-                  Recomendado (${recommendedTotal.toLocaleString()})
-                </Button>
-              </div>
-            </div>
-
-            <FingerprintCapture onCapture={handleFingerprintCapture} />
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowApprovalDialog(false)} className="w-full sm:w-auto">
-              Cancelar
-            </Button>
-            <Button onClick={() => handleSaveTreatment(true)} disabled={!fingerprintData} className="w-full sm:w-auto">
-              Confirmar Aprobación
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PatientTreatmentsSection
+        showTreatmentDialog={showTreatmentDialog}
+        setShowTreatmentDialog={setShowTreatmentDialog}
+        showApprovalDialog={showApprovalDialog}
+        setShowApprovalDialog={setShowApprovalDialog}
+        selectedPatient={selectedPatient}
+        currentTreatmentRows={currentTreatmentRows}
+        setCurrentTreatmentRows={setCurrentTreatmentRows}
+        conventionalTotal={conventionalTotal}
+        setConventionalTotal={setConventionalTotal}
+        recommendedTotal={recommendedTotal}
+        setRecommendedTotal={setRecommendedTotal}
+        selectedTreatmentType={selectedTreatmentType}
+        setSelectedTreatmentType={setSelectedTreatmentType}
+        fingerprintData={fingerprintData}
+        setFingerprintData={setFingerprintData}
+        handleTreatmentUpdateRows={handleTreatmentUpdateRows}
+        handleSaveTreatment={handleSaveTreatment}
+        handleApprovalRequest={handleApprovalRequest}
+        isSavingTreatment={isSavingTreatment}
+        setIsSavingTreatment={setIsSavingTreatment}
+        currentTreatmentId={approvalTreatmentId || 0}
+      />
 
       {/* Agregar estos componentes al final del componente principal, justo antes del cierre final */}
       <AppointmentDetails
         appointment={selectedAppointment}
         open={showAppointmentDetails}
         onOpenChange={setShowAppointmentDetails}
+        onGoToConfirm={handleGoToConfirmAppointment}
       />
 
       <TreatmentDetails
@@ -2804,6 +1985,15 @@ export default function PacientesPage() {
         onOpenChange={setShowTreatmentDetails}
         onUpdate={handleTreatmentUpdate}
       />
+
+      {/* Tutor Modal */}
+      {selectedTutorPatient && (
+        <TutorModal
+          open={showTutorModal}
+          onClose={() => setShowTutorModal(false)}
+          paciente={selectedTutorPatient}
+        />
+      )}
     </div>
   )
 }

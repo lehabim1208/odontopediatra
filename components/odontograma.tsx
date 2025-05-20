@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { jsPDF } from "jspdf"
+import { useTheme } from "@/components/theme-provider"
 
 interface OdontogramaProps {
   patientId: string
@@ -84,6 +85,7 @@ export function Odontograma({
   const canvas4Ref = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+  const { theme } = useTheme()
 
   const [selectedTreatment, setSelectedTreatment] = useState<string>("caries")
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
@@ -112,6 +114,20 @@ export function Odontograma({
     { id: "sealant", name: "Sellante", color: "#008000" },
     { id: "erase", name: "Borrar", color: "#FFFFFF" },
   ]
+
+  // Utilidad para obtener color de línea/número según tema o para PDF
+  const getToothLineColor = (forPDF = false) => {
+    if (forPDF) return "#000"; // Siempre negro para PDF
+    if (typeof window !== "undefined") {
+      if (document.documentElement.classList.contains("dark")) {
+        return "#fff"; // blanco en modo oscuro
+      } else {
+        return "#000"; // negro en modo claro
+      }
+    }
+    // Fallback para SSR
+    return theme === "dark" ? "#fff" : "#000";
+  }
 
   // Actualizar el tipo de dentición cuando cambia el prop defaultDentitionType
   useEffect(() => {
@@ -158,6 +174,30 @@ export function Odontograma({
       document.removeEventListener("download-odontogram-pdf", handleDownloadPDF)
     }
   }, [teeth, bridges, notes, dentitionType])
+
+  // Redibujar el canvas cuando cambia el tema (clase 'dark' en el html)
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      // Forzar redibujado al cambiar la clase 'dark'
+      if (canvasRef.current && canvas2Ref.current && canvas3Ref.current && canvas4Ref.current) {
+        const ctx = canvasRef.current.getContext("2d")
+        const ctx2 = canvas2Ref.current.getContext("2d")
+        const ctx3 = canvas3Ref.current.getContext("2d")
+        const ctx4 = canvas4Ref.current.getContext("2d")
+        if (ctx && ctx2 && ctx3 && ctx4) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+          ctx2.clearRect(0, 0, canvas2Ref.current.width, canvas2Ref.current.height)
+          ctx3.clearRect(0, 0, canvas3Ref.current.width, canvas3Ref.current.height)
+          ctx4.clearRect(0, 0, canvas4Ref.current.width, canvas4Ref.current.height)
+          drawOdontogram(ctx)
+          drawSavedTreatments(ctx2)
+          drawBridges(ctx4)
+        }
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, [teeth, bridges, dentitionType]);
 
   const initializeTeeth = () => {
     const newTeeth: { [key: number]: Tooth } = {}
@@ -291,25 +331,24 @@ export function Odontograma({
     drawBridges(ctx4)
   }, [teeth, bridges, dentitionType, selectedTooth, selectedSection])
 
-  const drawOdontogram = (ctx: CanvasRenderingContext2D) => {
+  const drawOdontogram = (ctx: CanvasRenderingContext2D, forPDF = false) => {
     const toothSize = 40
     const spacing = 10
     const startY = 20
     const startY2 = toothSize + 100
-
-    // Determinar el número de dientes por arco según el tipo de dentición
     const teethPerArch = dentitionType === "adult" ? 16 : 10
+    const lineColor = getToothLineColor(forPDF)
 
     // Dibujar los dientes superiores (1-16 para adultos, 1-10 para niños)
     for (let i = 0; i < teethPerArch; i++) {
       const toothId = i + 1
       const startX = i * toothSize + spacing * i + spacing
-      drawToothOutline(ctx, startX, startY, toothSize)
+      drawToothOutline(ctx, startX, startY, toothSize, lineColor)
 
       // Dibujar el número del diente
       ctx.font = "10pt Arial"
       ctx.textAlign = "center"
-      ctx.fillStyle = "blue"
+      ctx.fillStyle = lineColor
       ctx.fillText(toothId.toString(), startX + toothSize / 2, startY / 2 + 5)
     }
 
@@ -317,21 +356,21 @@ export function Odontograma({
     for (let i = 0; i < teethPerArch; i++) {
       const toothId = i + 1 + teethPerArch
       const startX = i * toothSize + spacing * i + spacing
-      drawToothOutline(ctx, startX, startY2, toothSize)
+      drawToothOutline(ctx, startX, startY2, toothSize, lineColor)
 
       // Dibujar el número del diente
       ctx.font = "10pt Arial"
       ctx.textAlign = "center"
-      ctx.fillStyle = "blue"
+      ctx.fillStyle = lineColor
       ctx.fillText(toothId.toString(), startX + toothSize / 2, startY2 - 10)
     }
   }
 
-  const drawToothOutline = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+  const drawToothOutline = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color?: string) => {
     const quarter = size / 4
     const threeQuarters = quarter * 3
 
-    ctx.strokeStyle = "#000000"
+    ctx.strokeStyle = color || getToothLineColor()
     ctx.lineWidth = 1
 
     // Sección oclusal (centro)
@@ -380,8 +419,20 @@ export function Odontograma({
     ctx.stroke()
   }
 
-  const drawSavedTreatments = (ctx: CanvasRenderingContext2D) => {
+  const drawSavedTreatments = (ctx: CanvasRenderingContext2D, forPDF = false) => {
+    const lineColor = getToothLineColor(forPDF)
     Object.values(teeth).forEach((tooth) => {
+      // Siempre dibujar el contorno según el tema
+      const toothSize = 40
+      const spacing = 10
+      const startY = tooth.id > (dentitionType === "adult" ? 16 : 10) ? toothSize + 100 : 20
+      let adjustedToothId = tooth.id
+      if (tooth.id > (dentitionType === "adult" ? 16 : 10)) {
+        adjustedToothId = tooth.id - (dentitionType === "adult" ? 16 : 10)
+      }
+      const startX = (adjustedToothId - 1) * toothSize + spacing * (adjustedToothId - 1) + spacing
+      drawToothOutline(ctx, startX, startY, toothSize, lineColor)
+
       // Dibujar secciones con tratamientos
       Object.entries(tooth.sections).forEach(([section, treatment]) => {
         if (treatment) {
@@ -1269,10 +1320,14 @@ export function Odontograma({
 
     if (!tempCtx) return
 
-    // Dibujar todos los canvas en el canvas temporal
-    tempCtx.drawImage(canvasRef.current, 0, 0)
-    tempCtx.drawImage(canvas2Ref.current, 0, 0)
-    tempCtx.drawImage(canvas4Ref.current, 0, 0)
+    // Fondo blanco
+    tempCtx.fillStyle = "#fff"
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height)
+
+    // Dientes y numeritos en negro
+    drawOdontogram(tempCtx, true)
+    drawSavedTreatments(tempCtx, true)
+    drawBridges(tempCtx)
 
     // Convertir el canvas a imagen
     const imgData = tempCanvas.toDataURL("image/png")
@@ -1393,7 +1448,7 @@ export function Odontograma({
       </div>
 
       {!readOnly && (
-        <Card className="mb-4">
+        <Card className="mb-4 bg-white dark:bg-[#23272f]">
           <CardContent className="pt-6">
             <RadioGroup
               defaultValue="caries"
@@ -1446,7 +1501,7 @@ export function Odontograma({
         </TabsList>
         <TabsContent value="notes" className="pt-4">
           <textarea
-            className="w-full h-32 p-4 border rounded-md resize-none"
+            className="w-full h-32 p-4 border rounded-md resize-none bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
             placeholder="Escriba las notas clínicas aquí..."
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

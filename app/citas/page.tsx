@@ -141,18 +141,20 @@ export default function CitasPage() {
     if (res.ok) {
       const data = await res.json()
       setAppointments(
-        data.map((cita: any) => {
-          const fecha = new Date(cita.fecha_hora)
-          const date = fecha.toLocaleDateString('sv-SE') // YYYY-MM-DD
-          const time = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) // HH:mm
-          return {
-            ...cita,
-            confirmed: cita.estado === "confirmada",
-            date,
-            time,
-            duration: parseInt(cita.duracion),
-          }
-        })
+        data
+          .filter((cita: any) => cita.estado !== "cancelada") // <-- Filtrar canceladas
+          .map((cita: any) => {
+            const fecha = new Date(cita.fecha_hora)
+            const date = fecha.toLocaleDateString('sv-SE') // YYYY-MM-DD
+            const time = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) // HH:mm
+            return {
+              ...cita,
+              confirmed: cita.estado === "confirmada",
+              date,
+              time,
+              duration: parseInt(cita.duracion),
+            }
+          })
       )
     }
   }
@@ -194,19 +196,10 @@ export default function CitasPage() {
       if (storedPatients) {
         setPatients(storedPatients)
       }
-
-      const appointmentId = searchParams.get("appointmentId")
-      if (appointmentId) {
-        const appointment = appointments.find((app) => app.id.toString() === appointmentId)
-        if (appointment) {
-          setSelectedAppointment(appointment)
-          setShowInfoDialog(true)
-        }
-      }
     }, 2500)
 
     return () => clearTimeout(timer)
-  }, [searchParams, appointments])
+  }, [])
 
   useEffect(() => {
     if (patientIdFromUrl) {
@@ -259,6 +252,49 @@ export default function CitasPage() {
     }
   }, [showInfoDialog, selectedAppointment])
 
+  useEffect(() => {
+    // Leer paciente desde sessionStorage (no desde la URL)
+    if (typeof window !== 'undefined') {
+      const patientId = sessionStorage.getItem('selectedPatientId')
+      const patientName = sessionStorage.getItem('selectedPatientName')
+      if (patientId && patientName) {
+        setNewAppointment((prev) => ({
+          ...prev,
+          paciente_id: parseInt(patientId),
+          patientName: patientName,
+        }))
+        setPatientSearchQuery(patientName)
+        setShowNewAppointmentDialog(true)
+        sessionStorage.removeItem('selectedPatientId')
+        sessionStorage.removeItem('selectedPatientName')
+      }
+    }
+  }, [])
+
+  // Abrir modal de detalle de cita si hay un id en localStorage (desde inicio)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedAppointmentId = window.localStorage.getItem('selectedAppointmentId')
+      if (storedAppointmentId && appointments.length > 0) {
+        const appointment = appointments.find(app => app.id.toString() === storedAppointmentId)
+        if (appointment) {
+          setSelectedAppointment(appointment)
+          setShowInfoDialog(true)
+        }
+        window.localStorage.removeItem('selectedAppointmentId')
+      }
+    }
+  }, [appointments])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (window.localStorage.getItem('openNewAppointmentModal') === '1') {
+        setShowNewAppointmentDialog(true)
+        window.localStorage.removeItem('openNewAppointmentModal')
+      }
+    }
+  }, [])
+
   const navigateDate = (direction: "prev" | "next") => {
     setCurrentDate((prevDate) => {
       if (view === "day") {
@@ -297,25 +333,36 @@ export default function CitasPage() {
     })
   }
 
-  const findNextAvailableSlot = (date: string, time: string, duration: number): string => {
-    let currentTime = getLocalDate(date, time)
-    const endOfDay = getLocalDate(date, `${CLINIC_END_TIME}:00`)
-    const lunchStart = getLocalDate(date, `${LUNCH_START}:00`)
-    const lunchEnd = getLocalDate(date, `${LUNCH_END}:00`)
-
-    while (currentTime < endOfDay) {
-      if (isWithinInterval(currentTime, { start: lunchStart, end: lunchEnd })) {
-        currentTime = lunchEnd
-        continue
-      }
-      const timeStr = format(currentTime, "HH:mm")
-      if (isWithinClinicHours(timeStr) && !isAppointmentOverlap(date, timeStr, duration)) {
-        return timeStr
-      }
-      currentTime = addMinutes(currentTime, 15)
+  const findNextAvailableSlot = (date: string, _time: string, duration: number): string | null => {
+    // Genera todos los slots posibles del día
+    const slots: string[] = [];
+    for (let h = CLINIC_START_TIME; h < CLINIC_END_TIME; h += 0.5) {
+      const hour = Math.floor(h);
+      const min = h % 1 === 0 ? "00" : "30";
+      slots.push(`${hour.toString().padStart(2, "0")}:${min}`);
     }
-    const nextDay = addDays(getLocalDate(date, "00:00"), 1)
-    return findNextAvailableSlot(format(nextDay, "yyyy-MM-dd"), `${CLINIC_START_TIME}:00`, duration)
+    const lunchStart = getLocalDate(date, `${LUNCH_START}:00`);
+    const lunchEnd = getLocalDate(date, `${LUNCH_END}:00`);
+    for (const slot of slots) {
+      const slotStart = getLocalDate(date, slot);
+      const slotEnd = addMinutes(slotStart, duration);
+      // Salta si el slot está en horario de comida
+      if (isWithinInterval(slotStart, { start: lunchStart, end: lunchEnd })) continue;
+      // Salta si el slot no está dentro del horario de clínica
+      if (!isWithinClinicHours(slot)) continue;
+      // Verifica solapamiento: el rango completo del slot no debe chocar con ninguna cita
+      const overlap = appointments.some(app => {
+        if (app.estado === "cancelada" || app.date !== date) return false;
+        const appStart = getLocalDate(app.date!, app.time!);
+        const appEnd = addMinutes(appStart, Number(app.duracion || app.duration || 30));
+        // Checa si hay intersección entre [slotStart, slotEnd) y [appStart, appEnd)
+        return slotStart < appEnd && slotEnd > appStart;
+      });
+      if (!overlap) {
+        return slot;
+      }
+    }
+    return null; // No hay slots disponibles
   }
 
   const isTimeInPast = (date: string, time: string): boolean => {
@@ -367,6 +414,7 @@ export default function CitasPage() {
     if (res.ok) {
       fetchAppointments()
       setShowNewAppointmentDialog(false)
+      resetNewAppointmentForm() // <-- Limpia los campos después de guardar
       toast({ title: "Éxito", description: "Cita agendada correctamente", variant: "success" })
     } else {
       toast({ title: "Error", description: "No se pudo agendar la cita", variant: "destructive" })
@@ -455,11 +503,7 @@ export default function CitasPage() {
     }
 
     // Citas de la semana (comparar fechas como string, no parseISO)
-    const weekAppointments = appointments.filter(app => {
-      if (!app.date) return false
-      const match = days.some(day => app.date === format(day, "yyyy-MM-dd"))
-      return match
-    })
+    const weekAppointments = appointments.filter(app => app.estado !== "cancelada" && app.date && days.some(day => app.date === format(day, "yyyy-MM-dd")))
 
     // Render
     return (
@@ -532,7 +576,7 @@ export default function CitasPage() {
       if (h !== 20) hours.push(`${h.toString().padStart(2, "0")}:30`)
     }
     // Citas del día
-    const dayAppointments = appointments.filter(app => app.date === format(day, "yyyy-MM-dd"))
+    const dayAppointments = appointments.filter(app => app.estado !== "cancelada" && app.date === format(day, "yyyy-MM-dd"))
     return (
       <div className="overflow-x-auto">
         <div className="grid grid-cols-2 min-w-[350px] border rounded">
@@ -593,7 +637,7 @@ export default function CitasPage() {
     // Agrupar citas por día
     const appointmentsByDay: Record<string, Appointment[]> = {}
     appointments.forEach(app => {
-      if (!app.date) return
+      if (!app.date || app.estado === "cancelada") return
       if (!appointmentsByDay[app.date]) appointmentsByDay[app.date] = []
       appointmentsByDay[app.date].push(app)
     })
@@ -640,9 +684,17 @@ export default function CitasPage() {
           <h1 className="text-3xl font-bold text-primary">Citas</h1>
           <p className="text-muted-foreground">Gestiona las citas de los pacientes</p>
         </div>
-        <Button onClick={() => setShowNewAppointmentDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Nueva Cita
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowNewAppointmentDialog(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Nueva Cita
+          </Button>
+          <Button
+            className="w-full bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+            onClick={() => router.push('/citasTabla')}
+          >
+            Ver todas las citas
+          </Button>
+        </div>
       </div>
 
       <Card>

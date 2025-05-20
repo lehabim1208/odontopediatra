@@ -158,10 +158,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Usar los permisos del estado (obtenidos de la API)
         if (currentPage && currentPage !== "login" && userPermissions) {
-          const hasAccess =
+          // Permitir que /citasTabla dependa del permiso de 'citas'
+          const permissionKey =
             currentPage === "configuracion"
-              ? userPermissions.configuracion
-              : userPermissions[currentPage] || false
+              ? "configuracion"
+              : currentPage === "citasTabla"
+                ? "citas"
+                : currentPage
+
+          const hasAccess = userPermissions[permissionKey] || false
 
           if (!hasAccess && currentPage !== "") {
             router.push("/")

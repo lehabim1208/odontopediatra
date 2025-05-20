@@ -17,10 +17,14 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const router = useRouter()
   const { setIsLoggedIn } = useAuth()
-  const [role, setRole] = useState<"doctor" | "secretary">("doctor")
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState("Cargando...")
+  const [showLogo, setShowLogo] = useState(false)
+
+  useEffect(() => {
+    setShowLogo(true)
+  }, [])
 
   // Función para alternar mensajes de carga
   useEffect(() => {
@@ -57,7 +61,7 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/login", {
         method: "POST",
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({ username, password }), // Ya no se envía el rol
         headers: { "Content-Type": "application/json" },
       });
 
@@ -66,12 +70,11 @@ export default function LoginPage() {
       if (res.ok) {
         handleLoginSuccess(data.user);
         storage.setItem("isLoggedIn", true);
-        storage.setItem("userRole", role);
+        storage.setItem("userRole", data.user.role || data.user.rol); // Guardar el rol detectado
         storage.setItem("currentUserId", data.user.id); // Guardar el id del usuario
         setIsLoggedIn(true);
         document.cookie = `isLoggedIn=true; path=/; max-age=86400`;
         window.location.href = "/"; // Fuerza recarga total
-        // router.push("/"); // Quitar esta línea si existe
       } else {
         setError(data.error || "Usuario o contraseña incorrectos");
         setIsLoading(false);
@@ -92,34 +95,10 @@ export default function LoginPage() {
       ) : null}
 
       <Card className="w-[400px] border-blue-200 shadow-xl overflow-hidden dark:bg-gray-900 dark:border-gray-700">
-        <div className="flex w-full overflow-hidden">
-          <button
-            className={`flex-1 py-4 text-center font-medium transition-colors ${
-              role === "doctor"
-                ? "bg-blue-600 text-white"
-                : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-gray-700 dark:text-blue-300 dark:hover:bg-gray-600 dark:hover:text-white"
-            }`}
-            onClick={() => setRole("doctor")}
-            type="button"
-          >
-            <User className="h-5 w-5 mx-auto mb-1" />
-            <span>Doctor</span>
-          </button>
-          <button
-            className={`flex-1 py-4 text-center font-medium transition-colors ${
-              role === "secretary"
-                ? "bg-blue-600 text-white"
-                : "bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-gray-700 dark:text-blue-300 dark:hover:bg-gray-600 dark:hover:text-white"
-            }`}
-            onClick={() => setRole("secretary")}
-            type="button"
-          >
-            <User className="h-5 w-5 mx-auto mb-1" />
-            <span>Secretaria</span>
-          </button>
-        </div>
         <div className="bg-white p-6 flex justify-center login-header dark:bg-gray-800">
-          <img src="/images/logo-emmanuel-severino.png" alt="Logo Emmanuel Severino" className="h-auto w-48" />
+          {showLogo && (
+            <img src="/images/logo-emmanuel-severino.png" alt="Logo Emmanuel Severino" className="h-auto w-48" />
+          )}
         </div>
         <CardHeader className="pb-2 bg-white dark:bg-gray-800">
           <CardTitle className="text-blue-800 text-center text-xl dark:text-blue-300">Inicio de sesión</CardTitle>
@@ -138,7 +117,7 @@ export default function LoginPage() {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder={role === "doctor" ? "Usuario" : "Secretaria"}
+                placeholder="Usuario"
                 className="border-blue-200 focus:border-blue-400 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 required
                 autoFocus={false}

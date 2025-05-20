@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
-  const { username, password, role } = await req.json();
+  const { username, password } = await req.json();
 
   // Buscar usuario solo por usuario (sin filtrar por rol)
   const [rows]: any = await db.query(
@@ -22,13 +22,7 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: "Usuario o contraseña incorrectos" }), { status: 401 });
   }
 
-  // Validar rol
-  if (user.rol !== role) {
-    return new Response(
-      JSON.stringify({ error: "Rol incorrecto. Cambie de sección", correctRole: user.rol }),
-      { status: 403 }
-    );
-  }
+  // Ya no se valida el rol
 
   // Puedes devolver más datos si lo necesitas
   return new Response(JSON.stringify({ success: true, user: { id: user.id, nombre: user.nombre, rol: user.rol } }), { status: 200 });

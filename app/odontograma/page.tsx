@@ -173,26 +173,26 @@ export default function OdontogramaPage() {
   }
 
   return (
-    <div className="p-6 md:p-10">
+    <div className="p-6 md:p-10 bg-muted dark:bg-gray-900 min-h-screen">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-primary brand-name">Odontograma Digital</h1>
+          <h1 className="text-3xl font-bold text-primary brand-name dark:text-primary">Odontograma Digital</h1>
           {/* Mostrar el nombre, edad y tutor del paciente si están disponibles */}
           {(patient?.nombre || patient?.name || patient?.edad || patient?.age || patient?.tutor || patient?.tutor_nombre || patient?.guardian) && (
-            <div className="mb-2 font-bold text-blue-600">
+            <div className="mb-2 font-bold text-blue-600 dark:text-blue-300">
               {(patient?.nombre || patient?.name) && <span>Paciente: {patient?.nombre || patient?.name} </span>}
               {(patient?.edad || patient?.age) && <span>| Edad: {patient?.edad || patient?.age} </span>}
             </div>
           )}
         </div>
-        <Button onClick={handleDownloadPDF} className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700" variant="default" disabled={pdfLoading}>
+        <Button onClick={handleDownloadPDF} className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800" variant="default" disabled={pdfLoading}>
           {pdfLoading ? <LoadingSpinner size="sm" /> : <Download className="h-4 w-4" />} Descargar PDF
         </Button>
       </div>
       <div className="grid gap-6 grid-cols-1">
-        <Card>
+        <Card className="bg-card dark:bg-gray-800 text-foreground dark:text-gray-100">
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="section-title">Edición de odontograma</CardTitle>
+            <CardTitle className="section-title dark:text-primary">Edición de odontograma</CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center space-x-2">
                 <Label htmlFor="default-dentition">Predeterminado:</Label>

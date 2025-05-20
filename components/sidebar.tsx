@@ -64,16 +64,35 @@ export function Sidebar({ onExpandChange }: { onExpandChange?: (expanded: boolea
     // Establecer información del usuario según el rol
     if (storedUserRole === "doctor") {
       setUserInfo({
-        name: "Dr. Emmanuel",
+        name: "Cargando ...",
         role: "Odontólogo",
       })
     } else if (storedUserRole === "secretary") {
       setUserInfo({
-        name: "Srita. Marcela",
+        name: "Cargando ...",
         role: "Recepción",
       })
     }
   }, [onExpandChange, userRole])
+
+  // Cargar nombre real del usuario desde la base de datos
+  useEffect(() => {
+    const userId = storage.getItem("currentUserId")
+    if (userId) {
+      fetch(`/api/usuarios/me?id=${userId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.nombre) {
+            const prefix = data.rol === 'doctor' ? 'Dr.' : 'Srta.';
+            setUserInfo({
+              name: `${prefix} ${data.nombre}`,
+              role: data.rol === 'doctor' ? 'Odontólogo' : 'Recepción'
+            });
+          }
+          
+        })
+    }
+  }, [userRole])
 
   // Toggle sidebar collapsed state
   const toggleSidebar = () => {

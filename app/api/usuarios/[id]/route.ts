@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const [rows] = await db.query("SELECT id, nombre, usuario, correo, rol, permisos, fecha_creacion FROM usuarios WHERE id = ?", [params.id]);
+  const { id } = await params;
+  const [rows] = await db.query("SELECT id, nombre, usuario, correo, rol, permisos, fecha_creacion FROM usuarios WHERE id = ?", [id]);
   const rowsArr = rows as any[];
   if (rowsArr.length === 0) return Response.json({ error: "No encontrado" }, { status: 404 });
   const u = rowsArr[0];
