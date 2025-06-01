@@ -1,0 +1,32 @@
+export interface ExploracionGeneral {
+    id?: number;
+    id_paciente: number;
+    exg_presion_arterial?: string | null;
+    exg_frecuencia_respiratoria?: string | null;
+    exg_pulso?: string | null;
+    exg_temperatura?: string | null;
+    exg_peso_actual?: string | null;
+    exg_talla?: string | null;
+    exg_cabeza?: string | null;
+    exg_cuello?: string | null;
+    exg_higiene?: string | null;
+    exg_periodonto?: string | null;
+    exg_prevalencia_caries?: string | null;
+    exg_denticion?: string | null;
+    exg_dientes_faltantes?: string | null;
+    exg_dientes_retenidos?: string | null;
+    exg_dientes_impactados?: string | null;
+    exg_descalcificacion_dientes?: string | null;
+    exg_insercion_frenillos?: string | null;
+    exg_labios?: string | null;
+    exg_proporcion_lengua_arcos?: string | null;
+    exg_problemas_lenguaje?: string | null;
+    exg_terceros_molares?: string | null;
+    exg_habitos?: string | null;
+    exg_tipo_perfil?: string | null;
+    exg_tipo_craneo?: string | null;
+    exg_tipo_cara?: string | null;
+    exg_forma_arcadas_dentarias?: string | null;
+    exg_forma_paladar?: string | null;
+    exg_observaciones_especiales?: string | null;
+}
