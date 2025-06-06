@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import path from "path"
 import { promises as fs } from "fs"
+import { toZonedTime, format as formatTz } from "date-fns-tz"
 
 // Tipos permitidos
 const ALLOWED_MIME_TYPES = [
@@ -74,6 +75,10 @@ export async function POST(req: Request) {
         // URL local
         const url = `/archivos/${fileName}`
 
+        const timeZone = 'America/Mexico_City';
+        const now = new Date();
+        const zonedDate = toZonedTime(now, timeZone);
+        const fecha_subida = formatTz(zonedDate, 'yyyy-MM-dd HH:mm:ss', { timeZone });
         const fileData = {
             id: crypto.randomUUID(),
             nombre: file.name,
@@ -81,7 +86,7 @@ export async function POST(req: Request) {
             tamano: file.size,
             url,
             etiqueta: tag || null,
-            fecha_subida: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            fecha_subida: fecha_subida,
             id_paciente: patientId,
             descripcion: description || null
         }
@@ -169,7 +174,7 @@ export async function DELETE(req: Request) {
 export async function PUT(req: Request) {
     try {
         const body = await req.json();
-        const { id, patientId, name, tag } = body;
+        const { id, patientId, name, tag, description } = body;
 
         if (!id || !patientId) {
             return NextResponse.json(
@@ -189,6 +194,10 @@ export async function PUT(req: Request) {
         if (typeof tag === "string" && tag.length > 0) {
             setClause.push("etiqueta = ?");
             values.push(tag);
+        }
+        if (typeof description === "string") {
+            setClause.push("descripcion = ?");
+            values.push(description);
         }
 
         if (setClause.length === 0) {

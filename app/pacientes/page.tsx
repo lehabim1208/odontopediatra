@@ -785,9 +785,9 @@ export default function PacientesPage() {
   }
 
   const handleViewRadiografias = (patientId: number) => {
-    // Guardar el ID en sessionStorage
+    // Guardar el ID en sessionStorage con la clave única para radiografías
     if (typeof window !== 'undefined') {
-      sessionStorage.setItem('selectedPatientId', String(patientId))
+      sessionStorage.setItem('radiografias_selectedPatientId', String(patientId))
     }
     // Navegar a la página sin query string
     router.push('/radiografias')

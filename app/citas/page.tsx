@@ -156,6 +156,7 @@ export default function CitasPage() {
     fecha_hora: "",
     tipo: "Consulta de valoración",
     duracion: "30",
+    duration: 30, // <-- add this for UI logic
     notas: "",
     estado: "pendiente",
   })
@@ -419,6 +420,7 @@ export default function CitasPage() {
       fecha_hora: "",
       tipo: "Consulta de valoración",
       duracion: "30",
+      duration: 30, // <-- reset both
       notas: "",
       estado: "pendiente",
     })
@@ -442,8 +444,21 @@ export default function CitasPage() {
   };
 
   const handleAddAppointment = async (appointmentData: Partial<Appointment>) => {
-    // Validar que todos los campos obligatorios estén llenos
-    if (!appointmentData.paciente_id || !appointmentData.date || !appointmentData.time || !appointmentData.duration || !appointmentData.tipo) {
+    // Debug: log incoming data
+    console.log('handleAddAppointment called with:', appointmentData);
+    // Log all relevant fields for debugging
+    console.log('paciente_id:', appointmentData.paciente_id, 'date:', appointmentData.date, 'time:', appointmentData.time, 'duration:', appointmentData.duration, 'tipo:', appointmentData.tipo);
+    // Extra validation for paciente_id
+    if (!appointmentData.paciente_id || isNaN(Number(appointmentData.paciente_id)) || Number(appointmentData.paciente_id) <= 0) {
+      toast({
+        title: "Campos obligatorios faltantes",
+        description: "Por favor, seleccione un paciente válido.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Correct required fields validation (must use 'duration', not 'duracion')
+    if (!appointmentData.paciente_id || !appointmentData.date || !appointmentData.time || (appointmentData.duration === undefined || appointmentData.duration === null || isNaN(Number(appointmentData.duration))) || !appointmentData.tipo) {
       toast({
         title: "Campos obligatorios faltantes",
         description: "Por favor, complete todos los campos requeridos: paciente, fecha, hora, duración y tipo.",
@@ -636,7 +651,7 @@ export default function CitasPage() {
 
   const handleEditAppointment = async (appointmentData: Appointment) => {
     // Validar que todos los campos obligatorios estén llenos
-    if (!appointmentData.paciente_id || !appointmentData.date || !appointmentData.time || !appointmentData.duration || !appointmentData.tipo) {
+    if (!appointmentData.paciente_id || !appointmentData.date || !appointmentData.time || (!appointmentData.duration && appointmentData.duration !== 0) || !appointmentData.tipo) {
       toast({
         title: "Campos obligatorios faltantes",
         description: "Por favor, complete todos los campos requeridos: paciente, fecha, hora, duración y tipo.",
@@ -1037,7 +1052,7 @@ export default function CitasPage() {
             return (
               <div key={idx} className={`border-b border-r min-h-[90px] p-1 align-top ${isCurrentMonth ? "bg-white" : "bg-muted/50"}`}>
                 <div className="text-xs font-bold mb-1 text-right">{day.getDate()}</div>
-                {dayAppointments.slice(0, 3).map(app => (
+                {dayAppointments.slice(0, 3).map((app) => (
                   <div
                     key={app.id}
                     className={`mb-1 px-1 py-0.5 rounded text-xs cursor-pointer truncate ${app.estado === "confirmada" ? "bg-green-600 text-white" : "bg-primary/90 text-white"} animate__animated ${appointmentAnimations[app.id] || ''}`}
@@ -1173,12 +1188,16 @@ export default function CitasPage() {
                           key={p.id}
                           className="px-2 py-1 hover:bg-gray-100 cursor-pointer text-sm"
                           onClick={() => {
-                            setNewAppointment(prev => ({ ...prev, paciente_id: p.id, patientName: p.name }));
+                            setNewAppointment(prev => ({ ...prev, paciente_id: Number(p.id), patientName: p.name }));
                             setPatientSearchQuery(p.name);
                             setShowPatientDropdown(false);
                           }}
                         >
-                          {p.name}
+                          <div className="font-medium text-black">{p.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {p.guardian ? <span>{p.guardian}</span> : <span>Sin tutor</span>}
+                            {p.phone ? <span> &middot; {p.phone}</span> : null}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1226,16 +1245,21 @@ export default function CitasPage() {
                   Duración *
                 </Label>
                 <div className="col-span-3">
-                  <select
-                    id="duration"
-                    className="w-full border rounded px-2 py-1"
-                    value={newAppointment.duration || "30"}
-                    onChange={e => setNewAppointment(prev => ({ ...prev, duration: Number(e.target.value) }))}
+                  <Select
+                    value={newAppointment.duration?.toString() || "30"}
+                    onValueChange={value => setNewAppointment(prev => ({ ...prev, duration: Number(value), duracion: value }))}
                   >
-                    {DURATION_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt} minutos</option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Seleccionar duración" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">15 minutos</SelectItem>
+                      <SelectItem value="30">30 minutos</SelectItem>
+                      <SelectItem value="60">1 hora</SelectItem>
+                      <SelectItem value="90">1 hora 30 minutos</SelectItem>
+                      <SelectItem value="240">4 horas</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -1243,18 +1267,26 @@ export default function CitasPage() {
                   Tipo *
                 </Label>
                 <div className="col-span-3">
-                  <select
-                    id="tipo"
-                    className="w-full border rounded px-2 py-1"
+                  <Select
                     value={newAppointment.tipo}
-                    onChange={e => setNewAppointment(prev => ({ ...prev, tipo: e.target.value }))}
+                    onValueChange={value => setNewAppointment(prev => ({ ...prev, tipo: value }))}
                   >
-                    <option value="Consulta de valoración">Consulta de valoración</option>
-                    <option value="Control">Control</option>
-                    <option value="Urgencia">Urgencia</option>
-                    <option value="Toma de impresión">Toma de impresión</option>
-                    <option value="Quirófano">Quirófano</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Seleccionar tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Consulta de valoración">Consulta de valoración</SelectItem>
+                      <SelectItem value="Consulta subsecuente">Consulta subsecuente</SelectItem>
+                      <SelectItem value="Consulta de 6 meses">Consulta de 6 meses</SelectItem>
+                      <SelectItem value="Resinas">Resinas</SelectItem>
+                      <SelectItem value="Extracción">Extracción</SelectItem>
+                      <SelectItem value="Pulpotomía">Pulpotomía</SelectItem>
+                      <SelectItem value="Pulpectomía">Pulpectomía</SelectItem>
+                      <SelectItem value="Urgencia">Urgencias</SelectItem>
+                      <SelectItem value="Toma de impresión">Toma de impresión</SelectItem>
+                      <SelectItem value="Quirófano">Quirófano</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -1262,11 +1294,12 @@ export default function CitasPage() {
                   Notas
                 </Label>
                 <div className="col-span-3">
-                  <textarea
+                  <Textarea
                     id="notas"
-                    className="w-full border rounded px-2 py-1"
+                    className="w-full"
                     value={newAppointment.notas || ""}
                     onChange={e => setNewAppointment(prev => ({ ...prev, notas: e.target.value }))}
+                    placeholder="Notas adicionales sobre la cita"
                   />
                 </div>
               </div>
@@ -1349,9 +1382,9 @@ export default function CitasPage() {
                 className="bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={() => {
                   if (showEditAppointmentDialog && selectedAppointment) {
-                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration) } : prev);
+                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) } : prev);
                   } else {
-                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration) }));
+                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) }));
                   }
                   setShowDurationWarning(false);
                 }}
@@ -1407,9 +1440,9 @@ export default function CitasPage() {
                 size="sm"
                 onClick={() => {
                   if (showEditAppointmentDialog && selectedAppointment) {
-                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration) } : prev);
+                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) } : prev);
                   } else {
-                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration) }));
+                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) }));
                   }
                   setShowWarningDialog(false);
                 }}
@@ -1563,7 +1596,7 @@ export default function CitasPage() {
                         <SelectItem value="Extracción">Extracción</SelectItem>
                         <SelectItem value="Pulpotomía">Pulpotomía</SelectItem>
                         <SelectItem value="Pulpectomía">Pulpectomía</SelectItem>
-                        <SelectItem value="Urgencia">Urgencia</SelectItem>
+                        <SelectItem value="Urgencia">Urgencias</SelectItem>
                         <SelectItem value="Toma de impresión">Toma de impresión</SelectItem>
                         <SelectItem value="Quirófano">Quirófano</SelectItem>
                       </SelectContent>
@@ -1579,8 +1612,7 @@ export default function CitasPage() {
                     className="col-span-3"
                     placeholder="Notas adicionales sobre la cita"
                   />
-                </div>
-              </div>
+                </div>              </div>
             </ScrollArea>
           )}
           <DialogFooter>

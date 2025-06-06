@@ -118,6 +118,49 @@ export function RadiographUploader({
   // Estado de descarga
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
+  // Estado para editar descripción
+  const [showEditDescriptionModal, setShowEditDescriptionModal] = useState(false)
+  const [editDescription, setEditDescription] = useState<string>("")
+
+  // Función para abrir el modal de edición de descripción
+  function handleEditDescription() {
+    if (selectedFile) {
+      setEditDescription(selectedFile.description || "")
+      setShowEditDescriptionModal(true)
+    }
+  }
+
+  // Función para guardar la descripción editada
+  async function handleSaveDescription() {
+    if (!selectedFile) return
+    try {
+      setFiles((prev) => prev.map((file) => file.id === selectedFile.id ? { ...file, description: editDescription } : file))
+      setSelectedFile({ ...selectedFile, description: editDescription })
+      await fetch(`/api/archivos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedFile.id,
+          patientId: selectedFile.patientId,
+          description: editDescription
+        })
+      })
+      setShowEditDescriptionModal(false)
+      toast({
+        title: "Descripción actualizada",
+        description: "La descripción del documento se ha actualizado correctamente",
+        variant: "success",
+        duration: 3000,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar la descripción",
+        variant: "destructive",
+      })
+    }
+  }
+
   // Actualizar la lista de archivos cuando cambian los initialFiles
   useEffect(() => {
     setFiles(initialFiles)
@@ -175,8 +218,10 @@ export function RadiographUploader({
   const handleUploadSubmit = () => {
     if (!uploadFile) return
 
-    const newFile: FileItem = {
-      id: uuidv4(),
+    // Solo muestra la vista previa local, pero NO agrega el archivo temporal a la lista
+    setPreviewFile({ file: uploadFile, url: uploadPreviewUrl })
+    if (onFileAdded) onFileAdded({
+      id: '', // id temporal, no se usará
       name: uploadFile.name,
       type: uploadFile.type,
       size: uploadFile.size,
@@ -185,12 +230,8 @@ export function RadiographUploader({
       uploadDate: new Date().toISOString(),
       patientId: patientId,
       description: uploadDescription,
-    }
-
-    setFiles((prev) => [newFile, ...prev])
-    setSelectedFile(newFile)
-    setPreviewFile({ file: uploadFile, url: uploadPreviewUrl })
-    if (onFileAdded) onFileAdded({ ...newFile, file: uploadFile } as FileItem & { file: File })
+      file: uploadFile
+    })
     setShowUploadModal(false)
 
     toast({
@@ -560,13 +601,18 @@ export function RadiographUploader({
                   <div className="text-sm text-muted-foreground">
                     <p>Tamaño: {formatFileSize(selectedFile.size)}</p>
                     <p>
-                      Subido: {format(new Date(selectedFile.uploadDate), "d 'de' MMMM, yyyy HH:mm", { locale: es })}
+                      Subido: {format(new Date(selectedFile.uploadDate.replace(' ', 'T')), "d 'de' MMMM, yyyy h:mm a", { locale: es })}
                     </p>
-                    {selectedFile.description && (
-                      <p className="mt-2">
-                        <span className="font-medium">Descripción:</span> {selectedFile.description}
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 mt-2">
+                      {selectedFile.description && (
+                        <p className="mt-2">
+                          <span className="font-medium">Descripción:</span> {selectedFile.description}
+                        </p>
+                      )}
+                      <Button variant="ghost" size="icon" title="Editar descripción" onClick={handleEditDescription}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-2 mt-4">
@@ -788,6 +834,30 @@ export function RadiographUploader({
             </Button>
             <Button variant="destructive" onClick={confirmDeleteFile}>
               Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para editar descripción */}
+      <Dialog open={showEditDescriptionModal} onOpenChange={setShowEditDescriptionModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Editar descripción</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <Textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              placeholder="Ingrese la nueva descripción"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDescriptionModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveDescription} disabled={editDescription.trim() === (selectedFile?.description || "")}>
+              Guardar
             </Button>
           </DialogFooter>
         </DialogContent>

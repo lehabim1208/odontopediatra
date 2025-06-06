@@ -3,8 +3,9 @@ import path from "path"
 import { promises as fs } from "fs"
 
 // GET /api/archivos/[filename] - Servir archivo privado
-export async function GET(req: NextRequest, context: { params: { filename: string } }) {
-  const filename = context.params.filename
+export async function GET(req: NextRequest, context: { params: Promise<{ filename: string }> }) {
+  const params = await context.params;
+  const filename = params.filename;
   if (!filename) {
     return NextResponse.json({ error: "Falta el nombre del archivo" }, { status: 400 })
   }

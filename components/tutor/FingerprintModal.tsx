@@ -99,7 +99,7 @@ const FingerprintModal: React.FC<FingerprintModalProps> = ({ open, onClose, tuto
               if (timeout) clearTimeout(timeout);
             } else if (data.resultado && typeof data.resultado === 'string' && (data.resultado.toLowerCase().includes('tiempo de espera') || data.resultado.toLowerCase().includes('error') || data.resultado.toLowerCase().includes('fallido'))) {
               setStatus('');
-              setError(data.resultado);
+              // No asignar setError para timeout/fallo, solo activar timeoutReached
               setCanClose(true);
               setWaiting(false);
               setIsCaptured(false);

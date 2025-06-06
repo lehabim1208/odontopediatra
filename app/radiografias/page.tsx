@@ -15,8 +15,14 @@ export default function RadiografiaPage() {
       try {
         let patientId = searchParams.get("patient")
 
-        if (!patientId && typeof window !== 'undefined') {
-          patientId = sessionStorage.getItem('selectedPatientId')
+        // Usar clave única para radiografías
+        const storageKey = 'radiografias_selectedPatientId';
+
+        if (patientId) {
+          // Si viene por query, actualizar storage
+          sessionStorage.setItem(storageKey, patientId)
+        } else if (typeof window !== 'undefined') {
+          patientId = sessionStorage.getItem(storageKey)
         }
 
         if (patientId) {
@@ -24,7 +30,6 @@ export default function RadiografiaPage() {
           if (response.ok) {
             const patientData = await response.json()
             setPatient(patientData)
-            sessionStorage.removeItem('selectedPatientId')
           }
         }
       } catch (error) {
@@ -39,8 +44,20 @@ export default function RadiografiaPage() {
 
   if (loading) {
     return (
-      <div className="p-6 md:p-10">
-        <p>Cargando...</p>
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 50,
+        background: 'rgba(255,255,255,0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100%',
+      }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600 mb-2" />
+          <div className="text-lg font-semibold text-blue-700">Cargando</div>
+        </div>
       </div>
     )
   }

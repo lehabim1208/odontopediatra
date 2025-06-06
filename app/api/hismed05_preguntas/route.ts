@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { ResultSetHeader as QueryResult, FieldPacket } from "mysql2";
+import { Preguntas } from "@/types/preguntas";
 
 // GET
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const id_paciente = searchParams.get("id_paciente");
-    if (!id_paciente) {
-        return NextResponse.json({ error: "Falta id_paciente" }, { status: 400 });
+    if (!id_paciente || isNaN(Number(id_paciente))) {
+        return NextResponse.json({ error: "Falta o id_paciente inválido" }, { status: 400 });
     }
-    const [rows]: [Array<Record<string, any>>, any] = await db.query(
+    const [rows] = await db.query(
         "SELECT * FROM hismed05_preguntas WHERE id_paciente = ?",
         [Number(id_paciente)]
-    );
+    ) as [Preguntas[], FieldPacket[]];
     return NextResponse.json({ data: rows[0] || null });
 }
 
@@ -60,14 +61,23 @@ export async function PUT(request: Request) {
     try {
         const body = await request.json();
         const { id_paciente, ...fields } = body;
-        if (!id_paciente) {
-            return NextResponse.json({ error: "Falta id_paciente" }, { status: 400 });
+        if (!id_paciente || isNaN(Number(id_paciente))) {
+            return NextResponse.json({ error: "Falta o id_paciente inválido" }, { status: 400 });
         }
-        const updates = Object.keys(fields)
-            .map((key) => `${key} = ?`)
-            .join(", ");
+        // Validar existencia antes de actualizar
+        const [existRows] = await db.query(
+            "SELECT id_paciente FROM hismed05_preguntas WHERE id_paciente = ?",
+            [Number(id_paciente)]
+        ) as [Preguntas[], FieldPacket[]];
+        if (!existRows || existRows.length === 0) {
+            return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
+        }
+        const updateKeys = Object.keys(fields);
+        if (updateKeys.length === 0) {
+            return NextResponse.json({ error: "No hay campos para actualizar" }, { status: 400 });
+        }
+        const updates = updateKeys.map((key) => `${key} = ?`).join(", ");
         const values = Object.values(fields);
-
         await db.query(
             `UPDATE hismed05_preguntas SET ${updates} WHERE id_paciente = ?`,
             [...values, Number(id_paciente)]
@@ -82,8 +92,16 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id_paciente = searchParams.get("id_paciente");
-    if (!id_paciente) {
-        return NextResponse.json({ error: "Falta id_paciente" }, { status: 400 });
+    if (!id_paciente || isNaN(Number(id_paciente))) {
+        return NextResponse.json({ error: "Falta o id_paciente inválido" }, { status: 400 });
+    }
+    // Validar existencia antes de eliminar
+    const [existRows] = await db.query(
+        "SELECT id_paciente FROM hismed05_preguntas WHERE id_paciente = ?",
+        [Number(id_paciente)]
+    ) as [Preguntas[], FieldPacket[]];
+    if (!existRows || existRows.length === 0) {
+        return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
     await db.query("DELETE FROM hismed05_preguntas WHERE id_paciente = ?", [Number(id_paciente)]);
     return NextResponse.json({ success: true });

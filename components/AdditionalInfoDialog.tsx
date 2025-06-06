@@ -1,4 +1,4 @@
-import React, { useEffect } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -6,8 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
-import type { FichaIdentificacion } from "@/types/ficha_identificacion";
-import type { HeredoFamiliares } from "@/types/heredo_familiares"
+import { LoadingSpinner } from "./loading-spinner";
+import type { FichaIdentificacion } from '../types/ficha_identificacion';
+import type { HeredoFamiliares } from '../types/heredo_familiares';
+import type { NoPatogenos } from '../types/no_patogenos';
+import type { Padecimientos } from '../types/padecimientos';
+import type { Preguntas } from '../types/preguntas';
+import type { AparatosYSistemas } from '../types/aparatos_y_sistemas';
+import type { ExploracionGeneral } from '../types/exploracion_general';
+import type { Examenes } from '../types/examenes';
+import type { Diagnostico } from '../types/diagnostico';
 
 // 1. Define el estado inicial fuera del componente (ajusta los campos según tus necesidades)
 const initialPatientInfo = {
@@ -187,84 +195,190 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
     showTermsDialog,
     setShowTermsDialog,
 }) => {
+    // Estado para controlar qué acordeones están abiertos
+    const [openSections, setOpenSections] = useState<string[]>([]);
+
+    // Estados para los datos de cada sección
+    const [fichaIdentificacion, setFichaIdentificacion] = useState<any>(null);
+    const [heredoFamiliares, setHeredoFamiliares] = useState<any>(null);
+    const [noPatologicos, setNoPatologicos] = useState<any>(null);
+    const [padecimientos, setPadecimientos] = useState<any>(null);
+    const [preguntas, setPreguntas] = useState<any>(null);
+    const [interrogatorio, setInterrogatorio] = useState<any>(null);
+    const [exploracion, setExploracion] = useState<any>(null);
+    const [examenes, setExamenes] = useState<any>(null);
+    const [diagnostico, setDiagnostico] = useState<any>(null);
+    const [consentimiento, setConsentimiento] = useState<any>(null);
+
+    // Estados de loading y error por sección
+    const [loadingSection, setLoadingSection] = useState<string | null>(null);
+    const [savingSection, setSavingSection] = useState<string | null>(null);
+    const [errorSection, setErrorSection] = useState<string | null>(null);
+
+    // --- FETCH Y UPDATE POR SECCIÓN ---
+    const fetchSectionData = useCallback(async (section: string) => {
+        if (!selectedPatient) return;
+        setLoadingSection(section);
+        setErrorSection(null);
+        try {
+            let res: Response;
+            let data: Record<string, any> | null = null;
+            switch (section) {
+                case "identificacion":
+                    res = await fetch(`/api/hismed01_ficha_identificacion?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setFichaIdentificacion(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "heredo-familiares":
+                    res = await fetch(`/api/hismed02_heredo_familiares?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setHeredoFamiliares(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "no-patologicos":
+                    res = await fetch(`/api/hismed03_no_patogenos?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setNoPatologicos(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "padecimientos":
+                    res = await fetch(`/api/hismed04_padecimientos?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setPadecimientos(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "preguntas":
+                    res = await fetch(`/api/hismed05_preguntas?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setPreguntas(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "interrogatorio":
+                    res = await fetch(`/api/hismed06_aparatos_y_sistemas?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setInterrogatorio(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "exploracion":
+                    res = await fetch(`/api/hismed07_exploracion_general?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setExploracion(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "examenes":
+                    res = await fetch(`/api/hismed08_examenes?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setExamenes(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "diagnostico":
+                    res = await fetch(`/api/hismed09_diagnostico?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setDiagnostico(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                case "consentimiento":
+                    res = await fetch(`/api/hismed10_consentimiento?id_paciente=${selectedPatient.id}`);
+                    data = await res.json();
+                    setConsentimiento(data?.data ?? {});
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    break;
+                default:
+                    break;
+            }
+        } catch (err) {
+            setErrorSection(section);
+        } finally {
+            setLoadingSection(null);
+        }
+    }, [selectedPatient, setEditPatientInfo]);
+
+    const updateSectionData = useCallback(async (section: string, data: any) => {
+        if (!selectedPatient) return;
+        setSavingSection(section);
+        setErrorSection(null);
+        try {
+            let url = "";
+            let method = "PUT";
+            let body = { ...data, id_paciente: selectedPatient.id };
+            if (section === "identificacion") {
+                url = `/api/hismed01_ficha_identificacion`;
+                method = "PATCH";
+                // Solo enviar los campos que cambiaron respecto a fichaIdentificacion
+                const changed: Record<string, any> = { id_paciente: selectedPatient.id };
+                for (const key in data) {
+                    if (data[key] !== fichaIdentificacion?.[key]) {
+                        changed[key] = data[key];
+                    }
+                }
+                // Si no hay cambios, no hacer request
+                if (Object.keys(changed).length === 1) {
+                    setSavingSection(null);
+                    return;
+                }
+                body = changed;
+            } else {
+                switch (section) {
+                    case "heredo-familiares":
+                        url = `/api/hismed02_heredo_familiares`;
+                        break;
+                    case "no-patologicos":
+                        url = `/api/hismed03_no_patogenos`;
+                        break;
+                    case "padecimientos":
+                        url = `/api/hismed04_padecimientos`;
+                        break;
+                    case "preguntas":
+                        url = `/api/hismed05_preguntas`;
+                        break;
+                    case "interrogatorio":
+                        url = `/api/hismed06_aparatos_y_sistemas`;
+                        break;
+                    case "exploracion":
+                        url = `/api/hismed07_exploracion_general`;
+                        break;
+                    case "examenes":
+                        url = `/api/hismed08_examenes`;
+                        break;
+                    case "diagnostico":
+                        url = `/api/hismed09_diagnostico`;
+                        break;
+                    case "consentimiento":
+                        url = `/api/hismed10_consentimiento`;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            await fetch(url, {
+                method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+        } catch (err) {
+            setErrorSection(section);
+        } finally {
+            setSavingSection(null);
+        }
+    }, [selectedPatient, fichaIdentificacion]);
+
+    // Handler para cuando se abre/cierra un acordeón
+    const handleAccordionChange = async (sections: string[]) => {
+        const newlyOpened = sections.filter(s => !openSections.includes(s));
+        for (const section of newlyOpened) {
+            await fetchSectionData(section);
+        }
+        setOpenSections(sections);
+    };
+
     // const handleEditPhoneInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     //     const phone = e.target.value.replace(/\D/g, ""); // Remove non-numeric characters
     //     setEditPatientInfo({ ...editPatientInfo, phone });
     // };
 
-    // Función auxiliar para cargar información de un endpoint
-    const cargarInformacion = async (endpoint: string, id: string) => {
-        try {
-            const res = await fetch(`/api/${endpoint}?id_paciente=${id}`);
-            if (res.ok) {
-                return await res.json();
-            }
-        } catch (error) {
-            // Si la tabla no existe o hay error, ignora
-        }
-        return null;
-    };
-
     useEffect(() => {
-        const fetchFicha = async () => {
-            if (open && selectedPatient) {
-                const endpoints = [
-                    { key: "data", endpoint: "hismed01_ficha_identificacion" },
-                    { key: "dataHeredo", endpoint: "hismed02_heredo_familiares" },
-                    { key: "dataNoPatogenos", endpoint: "hismed03_no_patogenos" },
-                    { key: "dataPadecimientos", endpoint: "hismed04_padecimientos" },
-                    { key: "dataPreguntas", endpoint: "hismed05_preguntas" },
-                    { key: "dataAparatos", endpoint: "hismed06_aparatos_y_sistemas" },
-                    { key: "dataExploracion", endpoint: "hismed07_exploracion_general" },
-                    { key: "dataExamenes", endpoint: "hismed08_examenes" },
-                    { key: "dataDiagnostico", endpoint: "hismed09_diagnostico" }
-                ];
-
-                const results = await Promise.all(
-                    endpoints.map(e => cargarInformacion(e.endpoint, selectedPatient.id))
-                );
-
-                const [
-                    data,
-                    dataHeredo,
-                    dataNoPatogenos,
-                    dataPadecimientos,
-                    dataPreguntas,
-                    dataAparatos,
-                    dataExploracion,
-                    dataExamenes,
-                    dataDiagnostico
-                ] = results;
-
-                setEditPatientInfo({
-                    ...editPatientInfo,
-                    ...(data?.data
-                        ? {
-                            ...data.data,
-                            fecha_nacimiento: data.data.fecha_nacimiento ? data.data.fecha_nacimiento.substring(0, 10) : "",
-                            ultimo_examen_dental: data.data.ultimo_examen_dental ? data.data.ultimo_examen_dental.substring(0, 10) : "",
-                        }
-                        : {
-                            // Si no hay ficha, usa datos básicos del paciente
-                            nombre: selectedPatient.name || "",
-                            edad: selectedPatient.age || "",
-                            padre_tutor: selectedPatient.guardian || "",
-                            telefono: selectedPatient.phone || "",
-                            correo: selectedPatient.email || "",
-                        }),
-                    ...(dataHeredo?.data ? dataHeredo.data : {}),
-                    ...(dataNoPatogenos?.data ? dataNoPatogenos.data : {}),
-                    ...(dataPadecimientos?.data ? dataPadecimientos.data : {}),
-                    ...(dataPreguntas?.data ? dataPreguntas.data : {}),
-                    ...(dataAparatos?.data ? dataAparatos.data : {}),
-                    ...(dataExploracion?.data ? dataExploracion.data : {}),
-                    ...(dataExamenes?.data ? dataExamenes.data : {}),
-                    ...(dataDiagnostico?.data ? dataDiagnostico.data : {})
-                });
-            }
-        };
-        fetchFicha();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Elimina el useEffect que carga todos los datos al abrir el modal
     }, [open, selectedPatient]);
 
     const saveAdditionalInfo = async () => {
@@ -516,6 +630,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
     // 2. Función para limpiar el formulario
     const handleClose = () => {
         setEditPatientInfo(initialPatientInfo);
+        setOpenSections([]); // Cierra todos los acordeones al cerrar el modal
         onOpenChange(false);
     };
 
@@ -525,10 +640,9 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                 open={open}
                 onOpenChange={(isOpen) => {
                     if (!isOpen) {
-                        handleClose(); // Limpia el formulario al cerrar (por X o por Cancelar)
-                    } else {
-                        onOpenChange(true); // Si se abre, solo cambia el estado
+                        setOpenSections([]); // Cierra todos los acordeones al cerrar el modal
                     }
+                    onOpenChange(isOpen);
                 }}
             >
                 <DialogContent className="max-w-[95vw] w-[95vw] h-[95vh] max-h-[95vh] overflow-hidden">
@@ -539,8 +653,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                     </DialogHeader>
                     <ScrollArea className="h-[calc(95vh-12rem)] px-6">
                         <div className="space-y-8 py-4 pr-4">
-
-                            <Accordion type="multiple" className="w-full">
+                            <Accordion type="multiple" className="w-full" value={openSections} onValueChange={handleAccordionChange}>
+                                {/* Ficha de Identificación */}
                                 <AccordionItem value="identificacion">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -548,6 +662,9 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {/* Loading y error */}
+                                        {loadingSection === "identificacion" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "identificacion" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                                 <div>
@@ -680,7 +797,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Label>Padre o tutor</Label>
                                                     <Input
                                                         value={editPatientInfo.padre_tutor ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, padreTutor: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, padre_tutor: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
@@ -708,9 +825,39 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     onChange={e => setEditPatientInfo({ ...editPatientInfo, interesTratamiento: e.target.value })}
                                                 />
                                             </div>
+                                            <button
+                                                className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                                disabled={savingSection === "identificacion"}
+                                                onClick={() => updateSectionData("identificacion", {
+                                                    nombre: editPatientInfo.nombre,
+                                                    edad: editPatientInfo.edad,
+                                                    sexo: editPatientInfo.sexo,
+                                                    nacionalidad: editPatientInfo.nacionalidad,
+                                                    estado_civil: editPatientInfo.estado_civil,
+                                                    ocupacion: editPatientInfo.ocupacion,
+                                                    medico: editPatientInfo.medico,
+                                                    telefono: editPatientInfo.telefono,
+                                                    lugar_origen: editPatientInfo.lugar_origen,
+                                                    lugar_residencia: editPatientInfo.lugar_residencia,
+                                                    fecha_nacimiento: editPatientInfo.fecha_nacimiento,
+                                                    domicilio: editPatientInfo.domicilio,
+                                                    region: editPatientInfo.region,
+                                                    correo: editPatientInfo.correo,
+                                                    emergencia: editPatientInfo.emergencia,
+                                                    talla_peso_nacimiento: editPatientInfo.talla_peso_nacimiento,
+                                                    tipo_parto: editPatientInfo.tipo_parto,
+                                                    padre_tutor: editPatientInfo.padre_tutor,
+                                                    ultimo_examen_dental: editPatientInfo.ultimo_examen_dental,
+                                                    motivo_consulta: editPatientInfo.motivo_consulta,
+                                                    interes_tratamiento: editPatientInfo.interes_tratamiento,
+                                                })}
+                                            >
+                                                {savingSection === "identificacion" ? "Guardando..." : "Guardar sección"}
+                                            </button>
                                         </div>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Heredo Familiares */}
                                 <AccordionItem value="heredo-familiares">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -718,6 +865,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "heredo-familiares" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "heredo-familiares" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div>
                                                 <Label className="font-semibold">a) Heredo Familiares:</Label>
@@ -873,8 +1022,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "heredo-familiares"}
+                                            onClick={() => updateSectionData("heredo-familiares", heredoFamiliares)}
+                                        >
+                                            {savingSection === "heredo-familiares" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* No Patológicos */}
                                 <AccordionItem value="no-patologicos">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -882,6 +1039,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "no-patologicos" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "no-patologicos" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
@@ -944,8 +1103,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 />
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "no-patologicos"}
+                                            onClick={() => updateSectionData("no-patologicos", noPatologicos)}
+                                        >
+                                            {savingSection === "no-patologicos" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Padecimientos */}
                                 <AccordionItem value="padecimientos">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -953,6 +1120,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "padecimientos" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "padecimientos" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-2">
                                             <Label className="font-semibold">Marcar cuando la respuesta es sí</Label>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -1150,8 +1319,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "padecimientos"}
+                                            onClick={() => updateSectionData("padecimientos", padecimientos)}
+                                        >
+                                            {savingSection === "padecimientos" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Preguntas */}
                                 <AccordionItem value="preguntas">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -1159,6 +1336,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "preguntas" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "preguntas" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div className="flex items-center gap-2">
                                                 <Checkbox
@@ -1212,8 +1391,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 <Label htmlFor="comentarios_problema">¿Le han comentado que tenga un problema de este tipo?</Label>
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "preguntas"}
+                                            onClick={() => updateSectionData("preguntas", preguntas)}
+                                        >
+                                            {savingSection === "preguntas" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Interrogatorio */}
                                 <AccordionItem value="interrogatorio">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -1221,6 +1408,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "interrogatorio" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "interrogatorio" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div>
                                                 <Label htmlFor="aparato_digestivo">Aparato Digestivo</Label>
@@ -1277,8 +1466,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 />
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "interrogatorio"}
+                                            onClick={() => updateSectionData("interrogatorio", interrogatorio)}
+                                        >
+                                            {savingSection === "interrogatorio" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Exploración */}
                                 <AccordionItem value="exploracion">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -1286,6 +1483,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "exploracion" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "exploracion" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-6">
                                             {/* Exploración Física */}
                                             <div>
@@ -1544,8 +1743,45 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "exploracion"}
+                                            onClick={() => updateSectionData("exploracion", {
+                                                exg_presion_arterial: editPatientInfo.exg_presion_arterial,
+                                                exg_frecuencia_respiratoria: editPatientInfo.exg_frecuencia_respiratoria,
+                                                exg_pulso: editPatientInfo.exg_pulso,
+                                                exg_temperatura: editPatientInfo.exg_temperatura,
+                                                exg_peso_actual: editPatientInfo.exg_peso_actual,
+                                                exg_talla: editPatientInfo.exg_talla,
+                                                exg_cabeza: editPatientInfo.exg_cabeza,
+                                                exg_cuello: editPatientInfo.exg_cuello,
+                                                exg_higiene: editPatientInfo.exg_higiene,
+                                                exg_periodonto: editPatientInfo.exg_periodonto,
+                                                exg_prevalencia_caries: editPatientInfo.exg_prevalencia_caries,
+                                                exg_denticion: editPatientInfo.exg_denticion,
+                                                exg_dientes_faltantes: editPatientInfo.exg_dientes_faltantes,
+                                                exg_dientes_retenidos: editPatientInfo.exg_dientes_retenidos,
+                                                exg_dientes_impactados: editPatientInfo.exg_dientes_impactados,
+                                                exg_descalcificacion_dientes: editPatientInfo.exg_descalcificacion_dientes,
+                                                exg_insercion_frenillos: editPatientInfo.exg_insercion_frenillos,
+                                                exg_labios: editPatientInfo.exg_labios,
+                                                exg_proporcion_lengua_arcos: editPatientInfo.exg_proporcion_lengua_arcos,
+                                                exg_problemas_lenguaje: editPatientInfo.exg_problemas_lenguaje,
+                                                exg_terceros_molares: editPatientInfo.exg_terceros_molares,
+                                                exg_habitos: editPatientInfo.exg_habitos,
+                                                exg_tipo_perfil: editPatientInfo.exg_tipo_perfil,
+                                                exg_tipo_craneo: editPatientInfo.exg_tipo_craneo,
+                                                exg_tipo_cara: editPatientInfo.exg_tipo_cara,
+                                                exg_forma_arcadas_dentarias: editPatientInfo.exg_forma_arcadas_dentarias,
+                                                exg_forma_paladar: editPatientInfo.exg_forma_paladar,
+                                                exg_observaciones_especiales: editPatientInfo.exg_observaciones_especiales
+                                            })}
+                                        >
+                                            {savingSection === "exploracion" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Exámenes */}
                                 <AccordionItem value="examenes">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -1553,6 +1789,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "examenes" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "examenes" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div>
                                                 <Label htmlFor="exm_tipo_denticion">Tipo de Dentición</Label>
@@ -1817,8 +2055,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "examenes"}
+                                            onClick={() => updateSectionData("examenes", examenes)}
+                                        >
+                                            {savingSection === "examenes" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
+                                {/* Diagnóstico */}
                                 <AccordionItem value="diagnostico">
                                     <AccordionTrigger>
                                         <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
@@ -1826,6 +2072,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
+                                        {loadingSection === "diagnostico" && <LoadingSpinner size="md" className="my-4" />}
+                                        {errorSection === "diagnostico" && <div className="text-red-500">Error al cargar datos</div>}
                                         <div className="space-y-4">
                                             <div>
                                                 <Label htmlFor="diag_examenes_laboratorio">Exámenes de Laboratorio (anexados al final)</Label>
@@ -1878,42 +2126,13 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 />
                                             </div>
                                         </div>
-                                    </AccordionContent>
-                                </AccordionItem>
-                                <AccordionItem value="consentimiento">
-                                    <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
-                                            Carta de Consentimiento Informado
-                                        </h3>
-                                    </AccordionTrigger>
-                                    <AccordionContent>
-                                        <fieldset className="border p-3 rounded">
-                                            <legend className="w-auto font-semibold">Carta de Consentimiento Informado</legend>
-                                            <p className="mb-4 text-sm">
-                                                Certifico que toda la información proporcionada es correcta y que es mi responsabilidad informar sobre
-                                                cualquier cambio sobre mi salud. He sido informado acerca del diagnóstico y plan de tratamiento que
-                                                recibiré en la clínica de rehabilitación oral, Campus Xalapa, y reconozco las complicaciones que se puedan
-                                                presentar durante dichos procedimientos, por lo que no tengo dudas al respecto y autorizo al odontólogo tratante para que efectúe los tratamientos necesarios para el alivio y/o curación de los padecimientos desde ahora y hasta el final de mi tratamiento.
-                                            </p>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div>
-                                                    <Label htmlFor="firma_paciente">Firma del paciente</Label>
-                                                    <Input
-                                                        id="firma_paciente"
-                                                        value={editPatientInfo.firma_paciente ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, firma_paciente: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <Label htmlFor="firma_cd">Firma del C.D.</Label>
-                                                    <Input
-                                                        id="firma_cd"
-                                                        value={editPatientInfo.firma_cd ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, firma_cd: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </fieldset>
+                                        <button
+                                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                                            disabled={savingSection === "diagnostico"}
+                                            onClick={() => updateSectionData("diagnostico", diagnostico)}
+                                        >
+                                            {savingSection === "diagnostico" ? "Guardando..." : "Guardar sección"}
+                                        </button>
                                     </AccordionContent>
                                 </AccordionItem>
                             </Accordion>
@@ -1925,17 +2144,20 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                     className="text-primary underline"
                                     onClick={() => setShowTermsDialog(true)}
                                 >
-                                    Leer términos y condiciones
+                                    Leer carta de consentimiento informado
                                 </Button>
                             </div>
 
                         </div>
                     </ScrollArea>
                     <DialogFooter className="px-6 py-4 border-t flex justify-end gap-4">
-                        <Button variant="outline" onClick={handleClose}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={saveAdditionalInfo}>Guardar</Button>
+                        <button
+                            className="mt-4 px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold transition-colors duration-200"
+                            onClick={handleClose}
+                            type="button"
+                        >
+                            Salir
+                        </button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

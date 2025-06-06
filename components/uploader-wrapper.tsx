@@ -73,7 +73,8 @@ export function UploaderWrapper({ patientId }: UploaderWrapperProps) {
   const deleteFileItem = async (fileId: string): Promise<void> => {
     try {
       const response = await fetch(`/api/archivos?id=${fileId}&patientId=${patientId}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error("Error al eliminar archivo")
+      if (!response.ok && response.status !== 404) throw new Error("Error al eliminar archivo")
+      // Si es 404, simplemente continúa (el archivo ya no existe)
     } catch (error) {
       console.error("Error deleting file:", error)
       throw error
@@ -141,10 +142,31 @@ export function UploaderWrapper({ patientId }: UploaderWrapperProps) {
 
   const handleFileAdded = async (file: FileItem & { file?: File }) => {
     try {
-      await saveFileItem(file)
-      // Después de guardar, recarga la lista completa desde la API
+      // Guardar archivo y obtener respuesta del backend (con id real)
+      const formData = new FormData()
+      if (file.file) formData.append("file", file.file)
+      formData.append("patientId", file.patientId)
+      if (file.tag) formData.append("tag", file.tag)
+      if (file.description) formData.append("description", file.description)
+      const response = await fetch('/api/archivos', {
+        method: 'POST',
+        body: formData
+      })
+      if (!response.ok) {
+        let errorMsg = "Error al guardar archivo"
+        try {
+          const errorData = await response.json()
+          errorMsg = errorData?.error || errorMsg
+          console.error("API error:", errorData)
+        } catch (e) {}
+        throw new Error(errorMsg)
+      }
+      const result = await response.json();
+      // Recarga la lista completa desde la API
       const files = await loadPatientFiles(patientId)
       setAllFiles(files)
+      // Selecciona el archivo recién subido como seleccionado en la vista previa
+      const uploaded = files.find(f => f.id === result.file.id)
     } catch (error) {
       console.error("Error al añadir el archivo:", error)
       // No agregues el archivo si falla
