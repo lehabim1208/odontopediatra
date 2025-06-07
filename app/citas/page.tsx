@@ -166,6 +166,9 @@ export default function CitasPage() {
   const [showDurationWarning, setShowDurationWarning] = useState(false);
   const [recommendedDuration, setRecommendedDuration] = useState<number | null>(null);
 
+  // Nuevo estado para saber a qué modal pertenece la sugerencia
+  const [suggestionTarget, setSuggestionTarget] = useState<'edit' | 'new' | null>(null);
+
   // Opciones válidas de duración (en minutos)
   const DURATION_OPTIONS = [15, 30, 60, 90, 240];
 
@@ -493,7 +496,7 @@ export default function CitasPage() {
     // Validar que no sea en el pasado (hoy)
     if (isTimeInPast(appointmentData.date!, appointmentData.time!)) {
       toast({
-        title: "Hora inválida",
+        title: "Hora o fecha inválida",
         description: "No puedes agendar una cita en el pasado.",
         variant: "destructive",
       });
@@ -554,21 +557,25 @@ export default function CitasPage() {
         setRecommendedTime(nextTime);
         setRecommendedDuration(maxDuration);
         setWarningMessage("El horario seleccionado choca con otra cita. Puedes elegir la próxima hora disponible o reducir la duración para agendar en este horario.");
+        setSuggestionTarget('new');
         setShowWarningDialog(true);
       } else if (nextTime) {
         setRecommendedTime(nextTime);
         setRecommendedDuration(null);
         setWarningMessage("El horario seleccionado choca con otra cita. Te sugerimos la próxima hora disponible.");
+        setSuggestionTarget('new');
         setShowWarningDialog(true);
       } else if (maxDuration) {
         setRecommendedTime(null);
         setRecommendedDuration(maxDuration);
         setWarningMessage("La duración seleccionada choca con otra cita. Te sugerimos una duración menor para este horario.");
+        setSuggestionTarget('new');
         setShowWarningDialog(true);
       } else {
         setRecommendedTime(null);
         setRecommendedDuration(null);
         setWarningMessage("No hay espacio disponible para la duración y horario seleccionados. Intenta con otro horario o duración.");
+        setSuggestionTarget('new');
         setShowWarningDialog(true);
       }
       return;
@@ -586,6 +593,7 @@ export default function CitasPage() {
       const suggestedDuration = DURATION_OPTIONS.filter(opt => opt <= rawMaxDuration).pop() || null;
       setRecommendedDuration(suggestedDuration && suggestedDuration >= minDropdown ? suggestedDuration : null);
       setWarningMessage("La duración seleccionada hace que la cita termine fuera del horario de atención. Te sugerimos una duración menor.");
+      setSuggestionTarget('new');
       setShowDurationWarning(true);
       return;
     }
@@ -649,7 +657,8 @@ export default function CitasPage() {
     }
   }
 
-  const handleEditAppointment = async (appointmentData: Appointment) => {
+  // Cambia la firma para devolver un booleano
+  const handleEditAppointment = async (appointmentData: Appointment): Promise<boolean> => {
     // Validar que todos los campos obligatorios estén llenos
     if (!appointmentData.paciente_id || !appointmentData.date || !appointmentData.time || (!appointmentData.duration && appointmentData.duration !== 0) || !appointmentData.tipo) {
       toast({
@@ -657,14 +666,14 @@ export default function CitasPage() {
         description: "Por favor, complete todos los campos requeridos: paciente, fecha, hora, duración y tipo.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     // Asegura que duration siempre sea un número
     const duration = Number(appointmentData.duration || 30);
     // Validar domingo (permitir solo si es urgencia)
     if (isSunday(appointmentData.date!) && appointmentData.tipo !== "Urgencia") {
       setShowSundayWarning(true);
-      return;
+      return false;
     }
     // Validar horario de comida (excepto urgencia)
     if (
@@ -672,7 +681,7 @@ export default function CitasPage() {
       isLunchTime(appointmentData.time!)
     ) {
       setShowLunchWarning(true);
-      return;
+      return false;
     }
     // Validar que la hora sea múltiplo de 15 min
     if (!isValidTimeInterval(appointmentData.time!)) {
@@ -681,16 +690,16 @@ export default function CitasPage() {
         description: "Solo puedes agendar citas en intervalos de 15 minutos (ejemplo: 10:00, 10:15, 10:30)",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     // Validar que no sea en el pasado (hoy)
     if (isTimeInPast(appointmentData.date!, appointmentData.time!)) {
       toast({
-        title: "Hora inválida",
+        title: "Hora o fecha inválida",
         description: "No puedes agendar una cita en el pasado.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     // Validar que esté dentro del horario de atención
     const [h, m] = appointmentData.time!.split(":").map(Number);
@@ -701,7 +710,7 @@ export default function CitasPage() {
         description: "Solo puedes agendar citas entre 9:00 AM y 8:30 PM.",
         variant: "destructive",
       });
-      return;
+      return false;
     }
     // Validar solapamiento: solo permitir si la cita inicia cuando termina otra, no antes
     const newAppStart = getLocalDate(appointmentData.date!, appointmentData.time!);
@@ -745,24 +754,28 @@ export default function CitasPage() {
         setRecommendedTime(nextTime);
         setRecommendedDuration(maxDuration);
         setWarningMessage("El horario seleccionado choca con otra cita. Puedes elegir la próxima hora disponible o reducir la duración para agendar en este horario.");
+        setSuggestionTarget('edit');
         setShowWarningDialog(true);
       } else if (nextTime) {
         setRecommendedTime(nextTime);
         setRecommendedDuration(null);
         setWarningMessage("El horario seleccionado choca con otra cita. Te sugerimos la próxima hora disponible.");
+        setSuggestionTarget('edit');
         setShowWarningDialog(true);
       } else if (maxDuration) {
         setRecommendedTime(null);
         setRecommendedDuration(maxDuration);
         setWarningMessage("La duración seleccionada choca con otra cita. Te sugerimos una duración menor para este horario.");
+        setSuggestionTarget('edit');
         setShowWarningDialog(true);
       } else {
         setRecommendedTime(null);
         setRecommendedDuration(null);
         setWarningMessage("No hay espacio disponible para la duración y horario seleccionados. Intenta con otro horario o duración.");
+        setSuggestionTarget('edit');
         setShowWarningDialog(true);
       }
-      return;
+      return false;
     }
     // Validar que la cita termine dentro del horario de atención y no cruce horario de comida (excepto urgencia)
     const endDuration = Number(appointmentData.duration || 30);
@@ -775,8 +788,9 @@ export default function CitasPage() {
       const suggestedDuration = DURATION_OPTIONS.filter(opt => opt <= rawMaxDuration).pop() || null;
       setRecommendedDuration(suggestedDuration && suggestedDuration >= minDropdown ? suggestedDuration : null);
       setWarningMessage("La duración seleccionada hace que la cita termine fuera del horario de atención. Te sugerimos una duración menor.");
+      setSuggestionTarget('edit');
       setShowDurationWarning(true);
-      return;
+      return false;
     }
     // Validar que no cruce horario de comida (excepto urgencia)
     if (appointmentData.tipo !== "Urgencia") {
@@ -804,9 +818,10 @@ export default function CitasPage() {
         }
         setWarningMessage("La duración seleccionada hace que la cita cruce el horario de comida. Te sugerimos una duración menor.");
         setShowDurationWarning(true);
-        return;
+        return false;
       }
     }
+    // Si todo está bien
     const cita = {
       id: appointmentData.id,
       paciente_id: appointmentData.paciente_id,
@@ -824,11 +839,12 @@ export default function CitasPage() {
     })
     if (res.ok) {
       fetchAppointments()
-      setShowEditAppointmentDialog(false)
       toast({ title: "Éxito", description: "Cita actualizada correctamente", variant: "success" });
       triggerAnimation(appointmentData.id, 'animate__heartBeat');
+      return true;
     } else {
       toast({ title: "Error", description: "No se pudo actualizar la cita", variant: "destructive" })
+      return false;
     }
   }
 
@@ -889,7 +905,7 @@ export default function CitasPage() {
     const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 })
     const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
-    // Horas de la cuadrícula (9:00 a 20:30 cada 30 min)
+    // Horas de la cuadrícula (9:00 a 20:30 cada 15 min)
     const hours: string[] = []
     for (let h = 9; h < 20.5; h += 0.25) {
       const hour = Math.floor(h);
@@ -899,6 +915,16 @@ export default function CitasPage() {
 
     // Citas de la semana (comparar fechas como string, no parseISO)
     const weekAppointments = appointments.filter(app => app.estado !== "cancelada" && app.date && days.some(day => app.date === format(day, "yyyy-MM-dd")))
+
+    // Handler para click en celda vacía
+    const handleEmptyCellClick = (date: Date, hour: string) => {
+      setNewAppointment(prev => ({
+        ...prev,
+        date: format(date, "yyyy-MM-dd"),
+        time: hour,
+      }));
+      setShowNewAppointmentDialog(true);
+    };
 
     // Render
     return (
@@ -928,29 +954,49 @@ export default function CitasPage() {
                 const cellAppointments = weekAppointments.filter(app => {
                   return app.date === format(day, "yyyy-MM-dd") && app.time === hour
                 })
-                // Renderizar cada cita con altura proporcional a la duración
+                // Si hay cita, renderizarla como antes
+                if (cellAppointments.length > 0) {
+                  return (
+                    <div key={`cell-${rowIdx}-${colIdx}`} className={`border-b border-r h-10 relative ${isLunch ? "bg-gray-300" : ""}`}> 
+                      {cellAppointments.map(app => {
+                        const durationMin = Number(app.duracion || app.duration || 30)
+                        const slots = Math.ceil(durationMin / 15)
+                        const height = 40 * slots
+                        return (
+                          <div
+                            key={app.id}
+                            className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow 
+                              ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white animate__animated ${appointmentAnimations[app.id] || ''}`}
+                            style={{ zIndex: 2, height: `${height - 8}px` }}
+                            onClick={() => handleAppointmentClick(app)}
+                          >
+                            <div className="font-semibold truncate">{app.patientName}</div>
+                            <div className="truncate">{app.tipo}</div>
+                            <div className="truncate">{formatTimeTo12h(app.time || "")} ({durationMin} min)</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                }
+                // Si es horario de comida, no hacer clickeable
+                if (isLunch) {
+                  return (
+                    <div key={`cell-${rowIdx}-${colIdx}`} className="border-b border-r h-10 bg-gray-300" />
+                  )
+                }
+                // Espacio vacío clickeable
                 return (
-                  <div key={`cell-${rowIdx}-${colIdx}`} className={`border-b border-r h-10 relative ${isLunch ? "bg-gray-300" : ""}`}>
-                    {cellAppointments.map(app => {
-                      // Calcular slots de 30 min
-                      const durationMin = Number(app.duracion || app.duration || 30)
-                      const slots = Math.ceil(durationMin / 15)
-                      // Altura base: h-10 (40px) por slot
-                      const height = 40 * slots
-                      return (
-                        <div
-                          key={app.id}
-                          className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow 
-                            ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white animate__animated ${appointmentAnimations[app.id] || ''}`}
-                          style={{ zIndex: 2, height: `${height - 8}px` }}
-                          onClick={() => handleAppointmentClick(app)}
-                        >
-                          <div className="font-semibold truncate">{app.patientName}</div>
-                          <div className="truncate">{app.tipo}</div>
-                          <div className="truncate">{formatTimeTo12h(app.time || "")} ({durationMin} min)</div>
-                        </div>
-                      )
-                    })}
+                  <div
+                    key={`cell-${rowIdx}-${colIdx}`}
+                    className="border-b border-r h-10 relative group cursor-pointer transition-colors duration-150"
+                    style={{ backgroundColor: 'transparent' }}
+                    onClick={() => handleEmptyCellClick(day, hour)}
+                  >
+                    <div
+                      className="absolute inset-0 rounded transition-colors duration-150 group-hover:bg-blue-200 group-hover:dark:bg-blue-900"
+                      style={{ zIndex: 1 }}
+                    />
                   </div>
                 )
               })}
@@ -964,7 +1010,7 @@ export default function CitasPage() {
   // Vista de Día
   function DayView() {
     const day = currentDate
-    // Horas de la cuadrícula (9:00 a 20:30 cada 30 min)
+    // Horas de la cuadrícula (9:00 a 20:30 cada 15 min)
     const hours: string[] = []
     for (let h = 9; h < 20.5; h += 0.25) {
       const hour = Math.floor(h);
@@ -973,6 +1019,17 @@ export default function CitasPage() {
     }
     // Citas del día
     const dayAppointments = appointments.filter(app => app.estado !== "cancelada" && app.date === format(day, "yyyy-MM-dd"))
+
+    // Handler para click en celda vacía (día)
+    const handleEmptyCellClick = (date: Date, hour: string) => {
+      setNewAppointment(prev => ({
+        ...prev,
+        date: format(date, "yyyy-MM-dd"),
+        time: hour,
+      }));
+      setShowNewAppointmentDialog(true);
+    };
+
     return (
       <div className="overflow-x-auto">
         <div className="grid grid-cols-2 min-w-[350px] border rounded">
@@ -983,33 +1040,54 @@ export default function CitasPage() {
           </div>
           {/* Filas de horas */}
           {hours.map((hour, rowIdx) => {
-            // Marcar horario de comida
             const [h, m] = hour.split(":").map(Number)
             const hourDecimal = h + m / 60
             const isLunch = hourDecimal >= LUNCH_START && hourDecimal < LUNCH_END
-            // Citas que inician en este slot
             const cellAppointments = dayAppointments.filter(app => app.time === hour)
+            if (cellAppointments.length > 0) {
+              return (
+                <React.Fragment key={rowIdx}>
+                  <div className="border-b border-r h-10 flex items-center justify-center text-xs bg-muted/50">{hour}</div>
+                  <div className={`border-b h-10 relative`}>
+                    {cellAppointments.map(app => {
+                      const durationMin = Number(app.duracion || app.duration || 30)
+                      const slots = Math.ceil(durationMin / 15)
+                      const height = 40 * slots
+                      return (
+                        <div
+                          key={app.id}
+                          className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white animate__animated ${appointmentAnimations[app.id] || ''}`}
+                          style={{ zIndex: 2, height: `${height - 8}px` }}
+                          onClick={() => handleAppointmentClick(app)}
+                        >
+                        </div>
+                      )
+                    })}
+                  </div>
+                </React.Fragment>
+              )
+            }
+            if (isLunch) {
+              return (
+                <React.Fragment key={rowIdx}>
+                  <div className="border-b border-r h-10 flex items-center justify-center text-xs bg-muted/50">{hour}</div>
+                  <div className="border-b h-10 bg-gray-300" />
+                </React.Fragment>
+              )
+            }
+            // Espacio vacío clickeable
             return (
               <React.Fragment key={rowIdx}>
                 <div className="border-b border-r h-10 flex items-center justify-center text-xs bg-muted/50">{hour}</div>
-                <div className={`border-b h-10 relative ${isLunch ? "bg-gray-300" : ""}`}>
-                  {cellAppointments.map(app => {
-                    const durationMin = Number(app.duracion || app.duration || 30)
-                    const slots = Math.ceil(durationMin / 15)
-                    const height = 40 * slots
-                    return (
-                      <div
-                        key={app.id}
-                        className={`absolute left-1 right-1 top-1 rounded px-2 py-1 text-xs cursor-pointer shadow ${app.estado === "confirmada" ? "bg-green-600" : "bg-primary/90"} text-white animate__animated ${appointmentAnimations[app.id] || ''}`}
-                        style={{ zIndex: 2, height: `${height - 8}px` }}
-                        onClick={() => handleAppointmentClick(app)}
-                      >
-                        <div className="font-semibold truncate">{app.patientName}</div>
-                        <div className="truncate">{app.tipo}</div>
-                        <div className="truncate">{formatTimeTo12h(app.time || "")} ({durationMin} min)</div>
-                      </div>
-                    )
-                  })}
+                <div
+                  className="border-b h-10 relative group cursor-pointer transition-colors duration-150"
+                  style={{ backgroundColor: 'transparent' }}
+                  onClick={() => handleEmptyCellClick(day, hour)}
+                >
+                  <div
+                    className="absolute inset-0 rounded transition-colors duration-150 group-hover:bg-blue-200 group-hover:dark:bg-blue-900"
+                    style={{ zIndex: 1 }}
+                  />
                 </div>
               </React.Fragment>
             )
@@ -1158,7 +1236,7 @@ export default function CitasPage() {
       >
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Nueva Cita</DialogTitle>
+            <DialogTitle className="text-blue-700 dark:text-blue-400">Nueva Cita</DialogTitle>
             <DialogDescription>
               Programe una nueva cita para un paciente. Los campos marcados con * son obligatorios.
             </DialogDescription>
@@ -1320,78 +1398,37 @@ export default function CitasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de advertencia de horario de comida */}
-      <Dialog open={showLunchWarning} onOpenChange={setShowLunchWarning}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="text-yellow-500 w-8 h-8" />
-                <span className="text-yellow-700">Horario de comida</span>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="mb-4 text-base">No se pueden agendar citas en horario de comida (1:00 PM a 4:30 PM), excepto si es una urgencia.</div>
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowLunchWarning(false)}>Cerrar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de advertencia de domingo */}
-      <Dialog open={showSundayWarning} onOpenChange={setShowSundayWarning}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="text-yellow-500 w-8 h-8" />
-                <span className="text-yellow-700">Domingo no disponible</span>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="mb-4 text-base">No se pueden agendar citas los domingos.</div>
-          <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowSundayWarning(false)}>Cerrar</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Modal de advertencia de duración */}
       <Dialog open={showDurationWarning} onOpenChange={setShowDurationWarning}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="text-yellow-500 w-8 h-8" />
-                <span className="text-yellow-700">Duración no permitida</span>
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-yellow-600">
+              <span className="text-xl">⚠️</span>
+              Duración inválida
             </DialogTitle>
           </DialogHeader>
           <div className="mb-4 text-base">
-            {warningMessage}<br />
-            {recommendedDuration ? (
-              <span>Duración máxima permitida para este horario: <b>{recommendedDuration} minutos</b>.</span>
-            ) : (
-              <span>No es posible agendar una cita en este horario con la duración seleccionada.</span>
+            {warningMessage}
+            {recommendedDuration && (
+              <div className="mt-2">
+                <Button
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => {
+                    if (suggestionTarget === 'edit' && selectedAppointment) {
+                      setSelectedAppointment(prev => prev ? { ...prev, duration: recommendedDuration } : prev);
+                    } else if (suggestionTarget === 'new') {
+                      setNewAppointment(prev => ({ ...prev, duration: recommendedDuration }));
+                    }
+                    setShowDurationWarning(false);
+                  }}
+                >
+                  Usar duración sugerida: {recommendedDuration} min
+                </Button>
+              </div>
             )}
           </div>
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => setShowDurationWarning(false)}>Cerrar</Button>
-            {recommendedDuration && (
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => {
-                  if (showEditAppointmentDialog && selectedAppointment) {
-                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) } : prev);
-                  } else {
-                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) }));
-                  }
-                  setShowDurationWarning(false);
-                }}
-              >
-                Aceptar sugerencia
-              </Button>
-            )}
+            <Button variant="ghost" onClick={() => setShowDurationWarning(false)}>Cerrar</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1400,56 +1437,82 @@ export default function CitasPage() {
       <Dialog open={showWarningDialog} onOpenChange={setShowWarningDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="text-yellow-500 w-8 h-8" />
-                <span className="text-yellow-700">Horario no disponible</span>
-              </div>
+            <DialogTitle className="flex items-center gap-2 text-yellow-600">
+              <span className="text-xl">⚠️</span>
+              Horario no disponible
             </DialogTitle>
           </DialogHeader>
-          <div className="mb-4 text-xs sm:text-sm" style={{ fontSize: '0.92rem', lineHeight: 1.3 }}>
-            {warningMessage}<br />
-            {recommendedTime && (
-              <span>Próxima hora disponible sugerida: <b>{formatTimeTo12h(recommendedTime)}</b>.<br /></span>
-            )}
-            {recommendedDuration && (
-              <span>Duración máxima permitida en este horario: <b>{recommendedDuration} minutos</b>.<br /></span>
+          <div className="mb-4 text-base">
+            {warningMessage}
+            {(recommendedTime || recommendedDuration) && (
+              <div className="mt-2 flex flex-col gap-2">
+                {recommendedTime && (
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => {
+                      if (suggestionTarget === 'edit' && selectedAppointment) {
+                        setSelectedAppointment(prev => prev ? { ...prev, time: recommendedTime } : prev);
+                      } else if (suggestionTarget === 'new') {
+                        setNewAppointment(prev => ({ ...prev, time: recommendedTime }));
+                      }
+                      setShowWarningDialog(false);
+                    }}
+                  >
+                    Usar horario sugerido: {recommendedTime}
+                  </Button>
+                )}
+                {recommendedDuration && (
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    onClick={() => {
+                      if (suggestionTarget === 'edit' && selectedAppointment) {
+                        setSelectedAppointment(prev => prev ? { ...prev, duration: recommendedDuration } : prev);
+                      } else if (suggestionTarget === 'new') {
+                        setNewAppointment(prev => ({ ...prev, duration: recommendedDuration }));
+                      }
+                      setShowWarningDialog(false);
+                    }}
+                  >
+                    Usar duración sugerida: {recommendedDuration} min
+                  </Button>
+                )}
+              </div>
             )}
           </div>
-          <div className="flex gap-1 justify-end flex-wrap">
-            <Button variant="outline" size="sm" className="px-2 py-1 text-xs" onClick={() => setShowWarningDialog(false)}>Cerrar</Button>
-            {recommendedTime && (
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 text-xs"
-                size="sm"
-                onClick={() => {
-                  if (showEditAppointmentDialog && selectedAppointment) {
-                    setSelectedAppointment(prev => prev ? { ...prev, time: recommendedTime } : prev);
-                  } else {
-                    setNewAppointment(prev => ({ ...prev, time: recommendedTime }));
-                  }
-                  setShowWarningDialog(false);
-                }}
-              >
-                Aceptar hora sugerida
-              </Button>
-            )}
-            {recommendedDuration && (
-              <Button
-                className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-xs"
-                size="sm"
-                onClick={() => {
-                  if (showEditAppointmentDialog && selectedAppointment) {
-                    setSelectedAppointment(prev => prev ? { ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) } : prev);
-                  } else {
-                    setNewAppointment(prev => ({ ...prev, duration: Number(recommendedDuration), duracion: String(recommendedDuration) }));
-                  }
-                  setShowWarningDialog(false);
-                }}
-              >
-                Aceptar duración sugerida
-              </Button>
-            )}
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setShowWarningDialog(false)}>Cerrar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de advertencia de domingo */}
+      <Dialog open={showSundayWarning} onOpenChange={setShowSundayWarning}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-yellow-600">
+              <span className="text-xl">⚠️</span>
+              Domingo no permitido
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mb-4 text-base">No se pueden agendar citas los domingos.</div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setShowSundayWarning(false)}>Cerrar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de advertencia de horario de comida */}
+      <Dialog open={showLunchWarning} onOpenChange={setShowLunchWarning}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-yellow-600">
+              <span className="text-xl">⚠️</span>
+              Horario de comida
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mb-4 text-base">No se pueden agendar citas en horario de comida (1:00 PM a 4:30 PM), excepto si es una urgencia.</div>
+          <div className="flex gap-2 justify-end">
+            <Button variant="ghost" onClick={() => setShowLunchWarning(false)}>Cerrar</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1527,7 +1590,7 @@ export default function CitasPage() {
       <Dialog open={showEditAppointmentDialog} onOpenChange={setShowEditAppointmentDialog}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Editar Cita</DialogTitle>
+            <DialogTitle className="text-blue-700 dark:text-blue-400">Editar Cita</DialogTitle>
             <DialogDescription>Modifica los datos de la cita y guarda los cambios.</DialogDescription>
           </DialogHeader>
           {selectedAppointment && (
@@ -1541,7 +1604,7 @@ export default function CitasPage() {
                       type="date"
                       value={selectedAppointment.date || ""}
                       onChange={e => setSelectedAppointment({ ...selectedAppointment, date: e.target.value })}
-                      required
+                                                                                     required
                     />
                   </div>
                 </div>
@@ -1566,7 +1629,7 @@ export default function CitasPage() {
                       onValueChange={value => setSelectedAppointment({ ...selectedAppointment, duration: Number.parseInt(value) })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar duración" />
+                                               <SelectValue placeholder="Seleccionar duración" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="15">15 minutos</SelectItem>
@@ -1582,8 +1645,8 @@ export default function CitasPage() {
                   <Label htmlFor="edit-type" className="text-right">Tipo *</Label>
                   <div className="col-span-3">
                     <Select
-                      value={selectedAppointment.tipo}
-                      onValueChange={value => setSelectedAppointment({ ...selectedAppointment, tipo: value })}
+                      value={selectedAppointment?.tipo || ""}
+                      onValueChange={value => setSelectedAppointment(selectedAppointment ? { ...selectedAppointment, tipo: value } : null)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar tipo" />
@@ -1619,8 +1682,8 @@ export default function CitasPage() {
             <Button variant="outline" onClick={() => setShowEditAppointmentDialog(false)}>Cancelar</Button>
             <Button onClick={async () => {
               if (selectedAppointment) {
-                await handleEditAppointment(selectedAppointment)
-                setShowEditAppointmentDialog(false)
+                const ok = await handleEditAppointment(selectedAppointment);
+                if (ok) setShowEditAppointmentDialog(false);
               }
             }}>Guardar cambios</Button>
           </DialogFooter>

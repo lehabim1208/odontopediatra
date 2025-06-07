@@ -12,7 +12,7 @@ import { es } from "date-fns/locale"
 
 export default function Home() {
   const router = useRouter()
-  const { userRole, hasPermission } = useAuth()
+  const { userRole, hasPermission, permissionsLoaded } = useAuth()
   const [stats, setStats] = useState({
     totalAppointments: 0,
     newPatients: 0,
@@ -106,6 +106,17 @@ export default function Home() {
 
   const handleFilterChange = (filter: "all" | "confirmed" | "unconfirmed") => {
     setConfirmationFilter(filter)
+  }
+
+  if (!permissionsLoaded) {
+    // Loader mientras se cargan los permisos
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <span className="text-lg font-semibold">Cargando permisos...</span>
+        </div>
+      </div>
+    )
   }
 
   return (

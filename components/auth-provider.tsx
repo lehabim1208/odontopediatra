@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
 import { storage } from "@/lib/storage"
@@ -36,6 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [permissionsLoaded, setPermissionsLoaded] = useState(false)
+  const [authReady, setAuthReady] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -45,23 +45,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`/api/usuarios/${id}`)
       if (res.ok) {
         const data = await res.json()
-        // Log temporal para depuración
-        // eslint-disable-next-line no-console
-        console.log("[AuthProvider] fetchUserPermissions id:", id)
-        // eslint-disable-next-line no-console
-        console.log("[AuthProvider] respuesta API /api/usuarios/[id]:", data)
-        setUserPermissions(data.permissions || {})
+        let perms = data.permissions || {}
+        // Fallback: intentar obtener de localStorage SIEMPRE si los permisos están vacíos
+        if (!perms || Object.keys(perms).length === 0) {
+          try {
+            let localPermsRaw = localStorage.getItem("userPermissions")
+            let localPerms = localPermsRaw
+            if (typeof localPermsRaw === "string") {
+              try {
+                localPerms = JSON.parse(localPermsRaw)
+              } catch (e) { /* ignore */ }
+            }
+            if (localPerms && typeof localPerms === "object" && Object.keys(localPerms).length > 0) {
+              perms = localPerms
+            }
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        setUserPermissions(perms)
         setUserRole(data.role)
         setUserId(data.id)
         setPermissionsLoaded(true)
       } else {
-        // eslint-disable-next-line no-console
-        console.log("[AuthProvider] Error en fetch /api/usuarios/" + id, res.status)
         setPermissionsLoaded(true)
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.log("[AuthProvider] Error en fetchUserPermissions", e)
       setPermissionsLoaded(true)
     }
   }, [])
@@ -71,22 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return; // Solo en cliente
 
     const isAuthenticated = storage.getItem("isLoggedIn") === "true";
-    const storedUserRole = storage.getItem("userRole");
     const storedUserId = storage.getItem("currentUserId");
     setIsLoggedIn(isAuthenticated);
-    setUserRole(storedUserRole);
-    setUserId(storedUserId ? Number(storedUserId) : null);
     setPermissionsLoaded(false)
 
-    // Forzar log para depuración
-    console.log("[AuthProvider] isAuthenticated:", isAuthenticated);
-    console.log("[AuthProvider] storedUserId:", storedUserId);
     if (isAuthenticated && storedUserId) {
       fetchUserPermissions(Number(storedUserId));
     } else {
+      setUserRole(null); // Limpiar userRole si no está logueado
+      setUserPermissions({}); // Limpiar permisos
       setPermissionsLoaded(true)
     }
-  }, [fetchUserPermissions])
+  }, [isLoggedIn, userId, fetchUserPermissions])
 
   // hasPermission revisa los permisos actuales
   const hasPermission = useCallback(
@@ -216,6 +221,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
+  // Cuando los permisos y el rol están listos, authReady=true
+  useEffect(() => {
+    if (permissionsLoaded && userRole) {
+      setAuthReady(true)
+    } else {
+      setAuthReady(false)
+    }
+  }, [permissionsLoaded, userRole])
+
   // Handle page transitions
   useEffect(() => {
     const handleStart = () => setIsLoading(true)
@@ -236,7 +250,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{ isLoggedIn, setIsLoggedIn, userRole, isDarkMode, toggleDarkMode, hasPermission, permissionsLoaded }}>
       {isLoading && <PageTransition />}
-      {isLoggedIn && pathname !== "/login" ? (
+      {/* Si está logueado pero los permisos o el rol NO están listos, solo muestra loader */}
+      {isLoggedIn && (!permissionsLoaded || !userRole || Object.keys(userPermissions).length === 0) && pathname !== "/login" ? (
+        <PageTransition />
+      ) : isLoggedIn && permissionsLoaded && userRole && Object.keys(userPermissions).length > 0 && pathname !== "/login" ? (
         <div className="flex min-h-screen">
           <Sidebar onExpandChange={setIsSidebarExpanded} />
           <div className={`flex-1 transition-all duration-300 ${isSidebarExpanded ? "md:ml-64" : "md:ml-[4.5rem]"}`}>

@@ -76,6 +76,17 @@ export default function LoginPage() {
         // Forzar log para depuración
         console.log("[Login] isLoggedIn tras login:", storage.getItem("isLoggedIn"));
         console.log("[Login] currentUserId tras login:", storage.getItem("currentUserId"));
+        // Esperar a que los permisos estén listos antes de redirigir
+        try {
+          const permisosRes = await fetch(`/api/usuarios/${data.user.id}`);
+          if (permisosRes.ok) {
+            const permisosData = await permisosRes.json();
+            // Guardar permisos en localStorage por si el AuthProvider los necesita rápido
+            storage.setItem("userPermissions", permisosData.permissions || {});
+          }
+        } catch (e) {
+          // Ignorar error, la UI fallback igual
+        }
         setTimeout(() => router.push("/"), 100); // Delay para asegurar sincronización de storage
       } else {
         setError(data.error || "Usuario o contraseña incorrectos");

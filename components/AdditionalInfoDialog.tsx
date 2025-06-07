@@ -599,7 +599,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
 
         const response = await saveOrUpdate("/api/hismed01_ficha_identificacion", ficha.id_paciente, ficha);
         const responseHeredo = await saveOrUpdate("/api/hismed02_heredo_familiares", heredoFamiliares.id_paciente, heredoFamiliares);
-        const responseNoPatogenos = await saveOrUpdate("/api/hismed03_no_patogenos", noPatogenos.id_paciente, noPatogenos);
+        const responseNoPatogenos = await saveOrUpdate("/api/hismed03_no_patogenos", noPatogenos.id_paciente, noPatologicos);
         const responsePadecimientos = await saveOrUpdate("/api/hismed04_padecimientos", padecimientos.id_paciente, padecimientos);
         const responsePreguntas = await saveOrUpdate("/api/hismed05_preguntas", preguntas.id_paciente, preguntas);
         const responseAparatos = await saveOrUpdate("/api/hismed06_aparatos_y_sistemas", aparatosYSistemas.id_paciente, aparatosYSistemas);
@@ -657,8 +657,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Ficha de Identificación */}
                                 <AccordionItem value="identificacion">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Ficha de Identificación
+                                            {loadingSection === "identificacion" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -860,8 +863,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Heredo Familiares */}
                                 <AccordionItem value="heredo-familiares">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Antecedentes Heredo-familiares
+                                            {loadingSection === "heredo-familiares" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1034,8 +1040,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* No Patológicos */}
                                 <AccordionItem value="no-patologicos">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Antecedentes No Patológicos
+                                            {loadingSection === "no-patologicos" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1115,8 +1124,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Padecimientos */}
                                 <AccordionItem value="padecimientos">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Padecimientos
+                                            {loadingSection === "padecimientos" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1331,8 +1343,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Preguntas */}
                                 <AccordionItem value="preguntas">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Preguntas
+                                            {loadingSection === "preguntas" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1403,8 +1418,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Interrogatorio */}
                                 <AccordionItem value="interrogatorio">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Interrogatorio por Aparatos y Sistemas
+                                            {loadingSection === "interrogatorio" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1478,8 +1496,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Exploración */}
                                 <AccordionItem value="exploracion">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Exploración General
+                                            {loadingSection === "exploracion" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -1784,8 +1805,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Exámenes */}
                                 <AccordionItem value="examenes">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Exámenes
+                                            {loadingSection === "examenes" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -2067,8 +2091,11 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                 {/* Diagnóstico */}
                                 <AccordionItem value="diagnostico">
                                     <AccordionTrigger>
-                                        <h3 className="text-xl font-semibold text-primary border-b pb-2 w-full text-left">
+                                        <h3 className="text-xl font-semibold text-primary w-full text-left transition-colors duration-200 hover:text-gray-400 focus:text-gray-400 flex items-center gap-2">
                                             Diagnóstico
+                                            {loadingSection === "diagnostico" && (
+                                                <span className="animate-pulse text-gray-400 text-base ml-2">Cargando sección...</span>
+                                            )}
                                         </h3>
                                     </AccordionTrigger>
                                     <AccordionContent>
@@ -2152,9 +2179,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                     </ScrollArea>
                     <DialogFooter className="px-6 py-4 border-t flex justify-end gap-4">
                         <button
-                            className="mt-4 px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold transition-colors duration-200"
-                            onClick={handleClose}
-                            type="button"
+                            className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
+                            onClick={onOpenChange?.bind(null, false)}
                         >
                             Salir
                         </button>
