@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion"
 import { LoadingSpinner } from "./loading-spinner";
+import { useToast } from "@/components/ui/use-toast";
 import type { FichaIdentificacion } from '../types/ficha_identificacion';
 import type { HeredoFamiliares } from '../types/heredo_familiares';
 import type { NoPatogenos } from '../types/no_patogenos';
@@ -215,6 +216,8 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
     const [savingSection, setSavingSection] = useState<string | null>(null);
     const [errorSection, setErrorSection] = useState<string | null>(null);
 
+    const { toast } = useToast();
+
     // --- FETCH Y UPDATE POR SECCIÓN ---
     const fetchSectionData = useCallback(async (section: string) => {
         if (!selectedPatient) return;
@@ -227,8 +230,16 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                 case "identificacion":
                     res = await fetch(`/api/hismed01_ficha_identificacion?id_paciente=${selectedPatient.id}`);
                     data = await res.json();
-                    setFichaIdentificacion(data?.data ?? {});
-                    setEditPatientInfo((prev: any) => ({ ...prev, ...(data?.data ?? {}) }));
+                    // Formatear fechas para los inputs tipo date
+                    let ficha = { ...(data?.data ?? {}) };
+                    if (ficha.fecha_nacimiento) {
+                        ficha.fecha_nacimiento = ficha.fecha_nacimiento.split("T")[0];
+                    }
+                    if (ficha.ultimo_examen_dental) {
+                        ficha.ultimo_examen_dental = ficha.ultimo_examen_dental.split("T")[0];
+                    }
+                    setFichaIdentificacion(ficha);
+                    setEditPatientInfo((prev: any) => ({ ...prev, ...ficha }));
                     break;
                 case "heredo-familiares":
                     res = await fetch(`/api/hismed02_heredo_familiares?id_paciente=${selectedPatient.id}`);
@@ -399,7 +410,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
             telefono: editPatientInfo.telefono || null,
             lugar_origen: editPatientInfo.lugar_origen || null,
             lugar_residencia: editPatientInfo.lugar_residencia || null,
-            fecha_nacimiento: editPatientInfo.fecha_nacimiento || null,
+            fecha_nacimiento: editPatientInfo.fecha_nacimiento ? editPatientInfo.fecha_nacimiento : null,
             domicilio: editPatientInfo.domicilio || null,
             region: editPatientInfo.region || null,
             correo: editPatientInfo.correo || null,
@@ -407,7 +418,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
             talla_peso_nacimiento: editPatientInfo.talla_peso_nacimiento || null,
             tipo_parto: editPatientInfo.tipo_parto || null,
             padre_tutor: editPatientInfo.padre_tutor || null,
-            ultimo_examen_dental: editPatientInfo.ultimo_examen_dental || null,
+            ultimo_examen_dental: editPatientInfo.ultimo_examen_dental ? editPatientInfo.ultimo_examen_dental : null,
             motivo_consulta: editPatientInfo.motivo_consulta || null,
             interes_tratamiento: editPatientInfo.interes_tratamiento || null
         };
@@ -572,24 +583,22 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
             diag_plan_tratamiento: editPatientInfo.diag_plan_tratamiento || null
         };
 
-        // Función auxiliar homogénea
+        // Función auxiliar homogénea mejorada
         const saveOrUpdate = async (apiUrl: string, id_paciente: number, data: any) => {
             let existe = false;
             try {
                 const res = await fetch(`${apiUrl}?id_paciente=${id_paciente}`);
                 if (res.ok) {
                     const json = await res.json();
-                    existe = Array.isArray(json.data)
-                        ? json.data.length > 0
-                        : !!json.data;
+                    // Considera inexistente si es null, undefined, objeto vacío o no tiene id_paciente
+                    existe = !!(json.data && typeof json.data === 'object' && Object.keys(json.data).length > 0 && json.data.id_paciente);
+                } else {
+                    existe = false;
                 }
             } catch (error) {
-                console.error("Error al verificar existencia en", apiUrl, error);
-                return null;
+                existe = false;
             }
-
             const method = existe ? "PUT" : "POST";
-            console.log(`Guardando datos en ${apiUrl} con método ${method}`, data);
             return fetch(apiUrl, {
                 method,
                 headers: { "Content-Type": "application/json" },
@@ -702,7 +711,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Label>Estado Civil</Label>
                                                     <Input
                                                         value={editPatientInfo.estado_civil ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, estadoCivil: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, estado_civil: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
@@ -732,14 +741,14 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Label>Lugar de Origen</Label>
                                                     <Input
                                                         value={editPatientInfo.lugar_origen ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, lugarOrigen: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, lugar_origen: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
                                                     <Label>Lugar de Residencia</Label>
                                                     <Input
                                                         value={editPatientInfo.lugar_residencia ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, lugarResidencia: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, lugar_residencia: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
@@ -747,7 +756,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Input
                                                         type="date"
                                                         value={editPatientInfo.fecha_nacimiento ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, fechaNacimiento: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, fecha_nacimiento: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
@@ -786,14 +795,14 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Label>Talla y peso al nacer</Label>
                                                     <Input
                                                         value={editPatientInfo.talla_peso_nacimiento ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, tallaPesoNacimiento: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, talla_peso_nacimiento: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
                                                     <Label>Tipo de parto</Label>
                                                     <Input
                                                         value={editPatientInfo.tipo_parto ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, tipoParto: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, tipo_parto: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
@@ -810,14 +819,14 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     <Input
                                                         type="date"
                                                         value={editPatientInfo.ultimo_examen_dental ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, ultimoExamenDental: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, ultimo_examen_dental: e.target.value })}
                                                     />
                                                 </div>
                                                 <div>
                                                     <Label>Motivo de la consulta</Label>
                                                     <Input
                                                         value={editPatientInfo.motivo_consulta ?? ""}
-                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, motivoConsulta: e.target.value })}
+                                                        onChange={e => setEditPatientInfo({ ...editPatientInfo, motivo_consulta: e.target.value })}
                                                     />
                                                 </div>
                                             </div>
@@ -825,7 +834,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 <Label>Interés del tratamiento</Label>
                                                 <Input
                                                     value={editPatientInfo.interes_tratamiento ?? ""}
-                                                    onChange={e => setEditPatientInfo({ ...editPatientInfo, interesTratamiento: e.target.value })}
+                                                    onChange={e => setEditPatientInfo({ ...editPatientInfo, interes_tratamiento: e.target.value })}
                                                 />
                                             </div>
                                             <button
@@ -937,28 +946,35 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                 <Label htmlFor="no_sabe">No sabe</Label>
                                             </div>
                                             <div>
-                                                <Label className="font-semibold">Enfermedades Heredofamiliares (marque si aplica):</Label>
+                                
                                             </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                <div className="space-y-2">
+                                            <Label className="font-semibold">Enfermedades Heredofamiliares (marque si aplica):</Label>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.tuberculosis}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, tuberculosis: checked })}
                                                         id="tuberculosis"
                                                     />
                                                     <Label htmlFor="tuberculosis">Tuberculosis</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.diabetes}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, diabetes: checked })}
                                                         id="diabetes"
                                                     />
                                                     <Label htmlFor="diabetes">Diabetes Mellitus</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.hipertension}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, hipertension: checked })}
                                                         id="hipertension"
                                                     />
                                                     <Label htmlFor="hipertension">Hipertensión</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.carcinomas}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, carcinomas: checked })}
@@ -966,25 +982,31 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     />
                                                     <Label htmlFor="carcinomas">Carcinomas</Label>
                                                 </div>
-                                                <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.cardiopatias}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, cardiopatias: checked })}
                                                         id="cardiopatias"
                                                     />
                                                     <Label htmlFor="cardiopatias">Cardiopatías</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.hepatitis}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, hepatitis: checked })}
                                                         id="hepatitis"
                                                     />
                                                     <Label htmlFor="hepatitis">Hepatitis</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.nefropatias}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, nefropatias: checked })}
                                                         id="nefropatias"
                                                     />
                                                     <Label htmlFor="nefropatias">Nefropatías</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.endocrinas}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, endocrinas: checked })}
@@ -992,25 +1014,31 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     />
                                                     <Label htmlFor="endocrinas">Enf. Endocrinas</Label>
                                                 </div>
-                                                <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.mentales}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, mentales: checked })}
                                                         id="mentales"
                                                     />
                                                     <Label htmlFor="mentales">Enf. Mentales</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.epilepsia}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, epilepsia: checked })}
                                                         id="epilepsia"
                                                     />
                                                     <Label htmlFor="epilepsia">Epilepsia</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.asma}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, asma: checked })}
                                                         id="asma"
                                                     />
                                                     <Label htmlFor="asma">Asma</Label>
+                                                </div>
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.hematologicas}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, hematologicas: checked })}
@@ -1018,7 +1046,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                                     />
                                                     <Label htmlFor="hematologicas">Enf. Hematológicas</Label>
                                                 </div>
-                                                <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
                                                     <Checkbox
                                                         checked={!!editPatientInfo.sifilis}
                                                         onCheckedChange={checked => setEditPatientInfo({ ...editPatientInfo, sifilis: checked })}
@@ -1031,7 +1059,37 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "heredo-familiares"}
-                                            onClick={() => updateSectionData("heredo-familiares", heredoFamiliares)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("heredo-familiares", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        abuelo_paterno: editPatientInfo.abuelo_paterno || null,
+                                                        abuela_paterna: editPatientInfo.abuela_paterna || null,
+                                                        abuelo_materno: editPatientInfo.abuelo_materno || null,
+                                                        abuela_materna: editPatientInfo.abuela_materna || null,
+                                                        madre: editPatientInfo.madre || null,
+                                                        padre: editPatientInfo.padre || null,
+                                                        otros_familiares: editPatientInfo.otros_familiares || null,
+                                                        no_sabe: !!editPatientInfo.no_sabe,
+                                                        tuberculosis: !!editPatientInfo.tuberculosis,
+                                                        diabetes: !!editPatientInfo.diabetes,
+                                                        hipertension: !!editPatientInfo.hipertension,
+                                                        carcinomas: !!editPatientInfo.carcinomas,
+                                                        cardiopatias: !!editPatientInfo.cardiopatias,
+                                                        hepatitis: !!editPatientInfo.hepatitis,
+                                                        nefropatias: !!editPatientInfo.nefropatias,
+                                                        endocrinas: !!editPatientInfo.endocrinas,
+                                                        mentales: !!editPatientInfo.mentales,
+                                                        epilepsia: !!editPatientInfo.epilepsia,
+                                                        asma: !!editPatientInfo.asma,
+                                                        hematologicas: !!editPatientInfo.hematologicas,
+                                                        sifilis: !!editPatientInfo.sifilis
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "heredo-familiares" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -1115,7 +1173,24 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "no-patologicos"}
-                                            onClick={() => updateSectionData("no-patologicos", noPatologicos)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("no-patologicos", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        cepillo: editPatientInfo.cepillo || null,
+                                                        habitacion: editPatientInfo.habitacion || null,
+                                                        tabaquismo: !!editPatientInfo.tabaquismo,
+                                                        alcoholismo: !!editPatientInfo.alcoholismo,
+                                                        alimentacion: editPatientInfo.alimentacion || null,
+                                                        inmunizaciones: editPatientInfo.inmunizaciones || null,
+                                                        pasatiempos: editPatientInfo.pasatiempos || null,
+                                                        vida_sexual: editPatientInfo.vida_sexual || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "no-patologicos" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -1334,7 +1409,40 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "padecimientos"}
-                                            onClick={() => updateSectionData("padecimientos", padecimientos)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("padecimientos", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        accidentes_cara: !!editPatientInfo.accidentes_cara,
+                                                        operaciones_cara: !!editPatientInfo.operaciones_cara,
+                                                        alergias: !!editPatientInfo.alergias,
+                                                        problemas_oido: !!editPatientInfo.problemas_oido,
+                                                        problemas_nacimiento: !!editPatientInfo.problemas_nacimiento,
+                                                        problemas_sangrado: !!editPatientInfo.problemas_sangrado,
+                                                        problemas_lenguaje: !!editPatientInfo.problemas_lenguaje,
+                                                        problemas_respiracion: !!editPatientInfo.problemas_respiracion,
+                                                        padecimiento_asma: !!editPatientInfo.padecimiento_asma,
+                                                        anemia: !!editPatientInfo.anemia,
+                                                        problemas_amigdalas: !!editPatientInfo.problemas_amigdalas,
+                                                        padecimiento_diabetes: !!editPatientInfo.padecimiento_diabetes,
+                                                        padecimiento_epilepsia: !!editPatientInfo.padecimiento_epilepsia,
+                                                        fiebre_reumatica: !!editPatientInfo.fiebre_reumatica,
+                                                        enfermedades_corazon: !!editPatientInfo.enfermedades_corazon,
+                                                        operacion_amigdalas: !!editPatientInfo.operacion_amigdalas,
+                                                        dificultad_masticar: !!editPatientInfo.dificultad_masticar,
+                                                        ronca_dormir: !!editPatientInfo.ronca_dormir,
+                                                        respira_boca: !!editPatientInfo.respira_boca,
+                                                        chupa_dedo: !!editPatientInfo.chupa_dedo,
+                                                        muerde_labio: !!editPatientInfo.muerde_labio,
+                                                        muerde_unas: !!editPatientInfo.muerde_unas,
+                                                        rechina_dientes: !!editPatientInfo.rechina_dientes,
+                                                        enfermedades_transmision_sexual: !!editPatientInfo.enfermedades_transmision_sexual
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "padecimientos" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -1409,7 +1517,22 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "preguntas"}
-                                            onClick={() => updateSectionData("preguntas", preguntas)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("preguntas", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        consulta_ortodoncia: !!editPatientInfo.consulta_ortodoncia,
+                                                        cuando_ortodoncia: editPatientInfo.cuando_ortodoncia || null,
+                                                        porque_ortodoncia: editPatientInfo.porque_ortodoncia || null,
+                                                        resultado_ortodoncia: editPatientInfo.resultado_ortodoncia || null,
+                                                        problema_mordida: !!editPatientInfo.problema_mordida,
+                                                        comentarios_problema: editPatientInfo.comentarios_problema || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "preguntas" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -1487,7 +1610,22 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "interrogatorio"}
-                                            onClick={() => updateSectionData("interrogatorio", interrogatorio)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("interrogatorio", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        aparato_digestivo: editPatientInfo.aparato_digestivo || null,
+                                                        aparato_cardiovascular: editPatientInfo.aparato_cardiovascular || null,
+                                                        aparato_respiratorio: editPatientInfo.aparato_respiratorio || null,
+                                                        aparato_genito_urinario: editPatientInfo.aparato_genito_urinario || null,
+                                                        sistema_endocrino: editPatientInfo.sistema_endocrino || null,
+                                                        sistema_nervioso: editPatientInfo.sistema_nervioso || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "interrogatorio" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -1509,7 +1647,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <div className="space-y-6">
                                             {/* Exploración Física */}
                                             <div>
-                                                <h5 className="font-semibold">Exploración Física</h5>
+                                                <h5 className="font-semibold text-blue-600 mb-2">Exploración Física</h5>
                                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                                     <div>
                                                         <Label htmlFor="exg_presion_arterial">Presión Arterial</Label>
@@ -1565,7 +1703,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                             </div>
                                             {/* Exploración Regional */}
                                             <div>
-                                                <h5 className="font-semibold">Exploración Regional</h5>
+                                                <h5 className="font-semibold text-blue-600 mb-2">Exploración Regional</h5>
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <Label htmlFor="exg_cabeza">Cabeza</Label>
@@ -1587,7 +1725,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                             </div>
                                             {/* Exploración Oral */}
                                             <div>
-                                                <h5 className="font-semibold">Exploración Oral</h5>
+                                                <h5 className="font-semibold text-blue-600 mb-2">Exploración Oral</h5>
                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                     <div>
                                                         <Label htmlFor="exg_higiene">Higiene</Label>
@@ -1767,36 +1905,44 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "exploracion"}
-                                            onClick={() => updateSectionData("exploracion", {
-                                                exg_presion_arterial: editPatientInfo.exg_presion_arterial,
-                                                exg_frecuencia_respiratoria: editPatientInfo.exg_frecuencia_respiratoria,
-                                                exg_pulso: editPatientInfo.exg_pulso,
-                                                exg_temperatura: editPatientInfo.exg_temperatura,
-                                                exg_peso_actual: editPatientInfo.exg_peso_actual,
-                                                exg_talla: editPatientInfo.exg_talla,
-                                                exg_cabeza: editPatientInfo.exg_cabeza,
-                                                exg_cuello: editPatientInfo.exg_cuello,
-                                                exg_higiene: editPatientInfo.exg_higiene,
-                                                exg_periodonto: editPatientInfo.exg_periodonto,
-                                                exg_prevalencia_caries: editPatientInfo.exg_prevalencia_caries,
-                                                exg_denticion: editPatientInfo.exg_denticion,
-                                                exg_dientes_faltantes: editPatientInfo.exg_dientes_faltantes,
-                                                exg_dientes_retenidos: editPatientInfo.exg_dientes_retenidos,
-                                                exg_dientes_impactados: editPatientInfo.exg_dientes_impactados,
-                                                exg_descalcificacion_dientes: editPatientInfo.exg_descalcificacion_dientes,
-                                                exg_insercion_frenillos: editPatientInfo.exg_insercion_frenillos,
-                                                exg_labios: editPatientInfo.exg_labios,
-                                                exg_proporcion_lengua_arcos: editPatientInfo.exg_proporcion_lengua_arcos,
-                                                exg_problemas_lenguaje: editPatientInfo.exg_problemas_lenguaje,
-                                                exg_terceros_molares: editPatientInfo.exg_terceros_molares,
-                                                exg_habitos: editPatientInfo.exg_habitos,
-                                                exg_tipo_perfil: editPatientInfo.exg_tipo_perfil,
-                                                exg_tipo_craneo: editPatientInfo.exg_tipo_craneo,
-                                                exg_tipo_cara: editPatientInfo.exg_tipo_cara,
-                                                exg_forma_arcadas_dentarias: editPatientInfo.exg_forma_arcadas_dentarias,
-                                                exg_forma_paladar: editPatientInfo.exg_forma_paladar,
-                                                exg_observaciones_especiales: editPatientInfo.exg_observaciones_especiales
-                                            })}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("exploracion", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        exg_presion_arterial: editPatientInfo.exg_presion_arterial || null,
+                                                        exg_frecuencia_respiratoria: editPatientInfo.exg_frecuencia_respiratoria || null,
+                                                        exg_pulso: editPatientInfo.exg_pulso || null,
+                                                        exg_temperatura: editPatientInfo.exg_temperatura || null,
+                                                        exg_peso_actual: editPatientInfo.exg_peso_actual || null,
+                                                        exg_talla: editPatientInfo.exg_talla || null,
+                                                        exg_cabeza: editPatientInfo.exg_cabeza || null,
+                                                        exg_cuello: editPatientInfo.exg_cuello || null,
+                                                        exg_higiene: editPatientInfo.exg_higiene || null,
+                                                        exg_periodonto: editPatientInfo.exg_periodonto || null,
+                                                        exg_prevalencia_caries: editPatientInfo.exg_prevalencia_caries || null,
+                                                        exg_denticion: editPatientInfo.exg_denticion || null,
+                                                        exg_dientes_faltantes: editPatientInfo.exg_dientes_faltantes || null,
+                                                        exg_dientes_retenidos: editPatientInfo.exg_dientes_retenidos || null,
+                                                        exg_dientes_impactados: editPatientInfo.exg_dientes_impactados || null,
+                                                        exg_descalcificacion_dientes: editPatientInfo.exg_descalcificacion_dientes || null,
+                                                        exg_insercion_frenillos: editPatientInfo.exg_insercion_frenillos || null,
+                                                        exg_labios: editPatientInfo.exg_labios || null,
+                                                        exg_proporcion_lengua_arcos: editPatientInfo.exg_proporcion_lengua_arcos || null,
+                                                        exg_problemas_lenguaje: editPatientInfo.exg_problemas_lenguaje || null,
+                                                        exg_terceros_molares: editPatientInfo.exg_terceros_molares || null,
+                                                        exg_habitos: editPatientInfo.exg_habitos || null,
+                                                        exg_tipo_perfil: editPatientInfo.exg_tipo_perfil || null,
+                                                        exg_tipo_craneo: editPatientInfo.exg_tipo_craneo || null,
+                                                        exg_tipo_cara: editPatientInfo.exg_tipo_cara || null,
+                                                        exg_forma_arcadas_dentarias: editPatientInfo.exg_forma_arcadas_dentarias || null,
+                                                        exg_forma_paladar: editPatientInfo.exg_forma_paladar || null,
+                                                        exg_observaciones_especiales: editPatientInfo.exg_observaciones_especiales || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "exploracion" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -2082,7 +2228,46 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "examenes"}
-                                            onClick={() => updateSectionData("examenes", examenes)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("examenes", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        exm_tipo_denticion: editPatientInfo.exm_tipo_denticion || null,
+                                                        exm_relacion_molar_clase: editPatientInfo.exm_relacion_molar_clase || null,
+                                                        exm_relacion_molar_derecho: editPatientInfo.exm_relacion_molar_derecho || null,
+                                                        exm_relacion_molar_izquierdo: editPatientInfo.exm_relacion_molar_izquierdo || null,
+                                                        exm_relacion_canina_clase: editPatientInfo.exm_relacion_canina_clase || null,
+                                                        exm_relacion_canina_derecho: editPatientInfo.exm_relacion_canina_derecho || null,
+                                                        exm_relacion_canina_izquierdo: editPatientInfo.exm_relacion_canina_izquierdo || null,
+                                                        exm_plano_terminal_recto_derecho: editPatientInfo.exm_plano_terminal_recto_derecho || null,
+                                                        exm_plano_terminal_recto_izquierdo: editPatientInfo.exm_plano_terminal_recto_izquierdo || null,
+                                                        exm_plano_terminal_mesial_derecho: editPatientInfo.exm_plano_terminal_mesial_derecho || null,
+                                                        exm_plano_terminal_mesial_izquierdo: editPatientInfo.exm_plano_terminal_mesial_izquierdo || null,
+                                                        exm_plano_terminal_distal_derecho: editPatientInfo.exm_plano_terminal_distal_derecho || null,
+                                                        exm_plano_terminal_distal_izquierdo: editPatientInfo.exm_plano_terminal_distal_izquierdo || null,
+                                                        exm_plano_terminal_mesian_exagerado_derecho: editPatientInfo.exm_plano_terminal_mesian_exagerado_derecho || null,
+                                                        exm_plano_terminal_mesian_exagerado_izquierdo: editPatientInfo.exm_plano_terminal_mesian_exagerado_izquierdo || null,
+                                                        exm_espaciada_arco_maxilar: editPatientInfo.exm_espaciada_arco_maxilar || null,
+                                                        exm_espaciada_arco_mandibular: editPatientInfo.exm_espaciada_arco_mandibular || null,
+                                                        exm_cerrada_arco_maxilar: editPatientInfo.exm_cerrada_arco_maxilar || null,
+                                                        exm_cerrada_arco_mandibular: editPatientInfo.exm_cerrada_arco_mandibular || null,
+                                                        exm_clasificacion_angle: editPatientInfo.exm_clasificacion_angle || null,
+                                                        exm_mordida_cruzada: editPatientInfo.exm_mordida_cruzada || null,
+                                                        exm_linea_media_dentaria_mandibular: editPatientInfo.exm_linea_media_dentaria_mandibular || null,
+                                                        exm_linea_media_dentaria_maxilar: editPatientInfo.exm_linea_media_dentaria_maxilar || null,
+                                                        exm_rotaciones: editPatientInfo.exm_rotaciones || null,
+                                                        exm_apianamiento: editPatientInfo.exm_apianamiento || null,
+                                                        exm_espacios: editPatientInfo.exm_espacios || null,
+                                                        exm_over_jet: editPatientInfo.exm_over_jet || null,
+                                                        exm_over_bite: editPatientInfo.exm_over_bite || null,
+                                                        exm_sintomatologia_atm: editPatientInfo.exm_sintomatologia_atm || null,
+                                                        exm_interferencias_oclusales: editPatientInfo.exm_interferencias_oclusales || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "examenes" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -2156,7 +2341,21 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                                         <button
                                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
                                             disabled={savingSection === "diagnostico"}
-                                            onClick={() => updateSectionData("diagnostico", diagnostico)}
+                                            onClick={async () => {
+                                                try {
+                                                    await updateSectionData("diagnostico", {
+                                                        id_paciente: selectedPatient?.id,
+                                                        diag_examenes_laboratorio: editPatientInfo.diag_examenes_laboratorio || null,
+                                                        diag_estudios_gabinete: editPatientInfo.diag_estudios_gabinete || null,
+                                                        diag_diagnostico: editPatientInfo.diag_diagnostico || null,
+                                                        diag_pronostico: editPatientInfo.diag_pronostico || null,
+                                                        diag_plan_tratamiento: editPatientInfo.diag_plan_tratamiento || null
+                                                    });
+                                                    toast({ title: "Sección guardada", description: "La sección se guardó correctamente.", variant: "success" });
+                                                } catch (e) {
+                                                    toast({ title: "Error", description: "Hubo un problema al guardar la sección.", variant: "destructive" });
+                                                }
+                                            }}
                                         >
                                             {savingSection === "diagnostico" ? "Guardando..." : "Guardar sección"}
                                         </button>
@@ -2180,7 +2379,7 @@ export const AdditionalInfoDialog: React.FC<AdditionalInfoDialogProps> = ({
                     <DialogFooter className="px-6 py-4 border-t flex justify-end gap-4">
                         <button
                             className="mt-4 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors duration-200"
-                            onClick={onOpenChange?.bind(null, false)}
+                            onClick={handleClose}
                         >
                             Salir
                         </button>

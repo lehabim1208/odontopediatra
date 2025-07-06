@@ -97,28 +97,38 @@ export async function PUT(request: Request) {
         if (!id_paciente || isNaN(Number(id_paciente))) {
             return NextResponse.json({ error: "Falta o id_paciente inválido" }, { status: 400 });
         }
+        // Filtrar campos undefined/null
+        const filteredEntries = Object.entries(fields).filter(
+            ([, value]) => value !== undefined && value !== null
+        );
+        if (filteredEntries.length === 0) {
+            return NextResponse.json({ error: "No hay campos para actualizar/insertar" }, { status: 400 });
+        }
+        const filteredKeys = filteredEntries.map(([key]) => key);
+        const filteredValues = filteredEntries.map(([, value]) => value);
         // Validar existencia antes de actualizar
         const [existRows] = await db.query(
             "SELECT id_paciente FROM hismed02_heredo_familiares WHERE id_paciente = ?",
             [Number(id_paciente)]
         ) as [HeredoFamiliares[], FieldPacket[]];
         if (!existRows || existRows.length === 0) {
-            return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
+            // Si no existe, hacer un INSERT (upsert)
+            await db.query(
+                `INSERT INTO hismed02_heredo_familiares (id_paciente, ${filteredKeys.join(", ")}) VALUES (?, ${filteredKeys.map(_=>"?").join(", ")})`,
+                [Number(id_paciente), ...filteredValues]
+            );
+            return NextResponse.json({ success: true, upserted: true });
         }
-        const updateKeys = Object.keys(fields);
-        if (updateKeys.length === 0) {
-            return NextResponse.json({ error: "No hay campos para actualizar" }, { status: 400 });
-        }
-        const updates = updateKeys.map((key) => `${key} = ?`).join(", ");
-        const values = Object.values(fields);
+        // Si existe, hacer UPDATE
+        const updates = filteredKeys.map((key) => `${key} = ?`).join(", ");
         await db.query(
             `UPDATE hismed02_heredo_familiares SET ${updates} WHERE id_paciente = ?`,
-            [...values, Number(id_paciente)]
+            [...filteredValues, Number(id_paciente)]
         );
         return NextResponse.json({ success: true });
     } catch (error) {
-        console.error("Error al actualizar antecedentes heredo-familiares:", error, "route.ts");
-        return NextResponse.json({ error: "Error al actualizar antecedentes heredo-familiares" }, { status: 500 });
+        console.error("Error al actualizar/insertar antecedentes heredo-familiares:", error);
+        return NextResponse.json({ error: String(error) }, { status: 500 });
     }
 }
 
