@@ -1,3 +1,5 @@
+CREATE DATABASE  IF NOT EXISTS `odontopediatra` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+USE `odontopediatra`;
 -- MySQL dump 10.13  Distrib 8.0.41, for Win64 (x86_64)
 --
 -- Host: localhost    Database: odontopediatra
@@ -39,6 +41,15 @@ CREATE TABLE `archivos` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Dumping data for table `archivos`
+--
+
+LOCK TABLES `archivos` WRITE;
+/*!40000 ALTER TABLE `archivos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `archivos` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `citas`
 --
 
@@ -59,8 +70,17 @@ CREATE TABLE `citas` (
   KEY `usuario_id` (`usuario_id`),
   CONSTRAINT `citas_ibfk_1` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`),
   CONSTRAINT `citas_ibfk_2` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=25 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `citas`
+--
+
+LOCK TABLES `citas` WRITE;
+/*!40000 ALTER TABLE `citas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `citas` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `consultorio`
@@ -81,6 +101,15 @@ CREATE TABLE `consultorio` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Dumping data for table `consultorio`
+--
+
+LOCK TABLES `consultorio` WRITE;
+/*!40000 ALTER TABLE `consultorio` DISABLE KEYS */;
+/*!40000 ALTER TABLE `consultorio` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `detalle_tratamientos`
 --
 
@@ -98,8 +127,17 @@ CREATE TABLE `detalle_tratamientos` (
   PRIMARY KEY (`id`),
   KEY `fk_tratamiento` (`id_tratamiento`),
   CONSTRAINT `fk_tratamiento` FOREIGN KEY (`id_tratamiento`) REFERENCES `tratamientos` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `detalle_tratamientos`
+--
+
+LOCK TABLES `detalle_tratamientos` WRITE;
+/*!40000 ALTER TABLE `detalle_tratamientos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `detalle_tratamientos` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed01_ficha_identificacion`
@@ -137,8 +175,17 @@ CREATE TABLE `hismed01_ficha_identificacion` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed01_ficha_identificacion_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed01_ficha_identificacion`
+--
+
+LOCK TABLES `hismed01_ficha_identificacion` WRITE;
+/*!40000 ALTER TABLE `hismed01_ficha_identificacion` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed01_ficha_identificacion` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed02_heredo_familiares`
@@ -175,8 +222,17 @@ CREATE TABLE `hismed02_heredo_familiares` (
   UNIQUE KEY `id` (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed02_heredo_familiares_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed02_heredo_familiares`
+--
+
+LOCK TABLES `hismed02_heredo_familiares` WRITE;
+/*!40000 ALTER TABLE `hismed02_heredo_familiares` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed02_heredo_familiares` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed03_no_patogenos`
@@ -199,8 +255,17 @@ CREATE TABLE `hismed03_no_patogenos` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed03_no_patogenos_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed03_no_patogenos`
+--
+
+LOCK TABLES `hismed03_no_patogenos` WRITE;
+/*!40000 ALTER TABLE `hismed03_no_patogenos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed03_no_patogenos` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed04_padecimientos`
@@ -239,8 +304,17 @@ CREATE TABLE `hismed04_padecimientos` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed04_padecimientos_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed04_padecimientos`
+--
+
+LOCK TABLES `hismed04_padecimientos` WRITE;
+/*!40000 ALTER TABLE `hismed04_padecimientos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed04_padecimientos` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed05_preguntas`
@@ -261,8 +335,17 @@ CREATE TABLE `hismed05_preguntas` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed05_preguntas_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed05_preguntas`
+--
+
+LOCK TABLES `hismed05_preguntas` WRITE;
+/*!40000 ALTER TABLE `hismed05_preguntas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed05_preguntas` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed06_aparatos_y_sistemas`
@@ -283,8 +366,17 @@ CREATE TABLE `hismed06_aparatos_y_sistemas` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed06_aparatos_y_sistemas_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed06_aparatos_y_sistemas`
+--
+
+LOCK TABLES `hismed06_aparatos_y_sistemas` WRITE;
+/*!40000 ALTER TABLE `hismed06_aparatos_y_sistemas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed06_aparatos_y_sistemas` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed07_exploracion_general`
@@ -327,8 +419,17 @@ CREATE TABLE `hismed07_exploracion_general` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `hismed07_exploracion_general_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `hismed07_exploracion_general`
+--
+
+LOCK TABLES `hismed07_exploracion_general` WRITE;
+/*!40000 ALTER TABLE `hismed07_exploracion_general` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed07_exploracion_general` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `hismed08_examenes`
@@ -377,6 +478,15 @@ CREATE TABLE `hismed08_examenes` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Dumping data for table `hismed08_examenes`
+--
+
+LOCK TABLES `hismed08_examenes` WRITE;
+/*!40000 ALTER TABLE `hismed08_examenes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed08_examenes` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `hismed09_diagnostico`
 --
 
@@ -398,6 +508,15 @@ CREATE TABLE `hismed09_diagnostico` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Dumping data for table `hismed09_diagnostico`
+--
+
+LOCK TABLES `hismed09_diagnostico` WRITE;
+/*!40000 ALTER TABLE `hismed09_diagnostico` DISABLE KEYS */;
+/*!40000 ALTER TABLE `hismed09_diagnostico` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `huellas`
 --
 
@@ -413,8 +532,17 @@ CREATE TABLE `huellas` (
   PRIMARY KEY (`id`),
   KEY `tutor_id` (`tutor_id`),
   CONSTRAINT `huellas_ibfk_1` FOREIGN KEY (`tutor_id`) REFERENCES `tutores` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `huellas`
+--
+
+LOCK TABLES `huellas` WRITE;
+/*!40000 ALTER TABLE `huellas` DISABLE KEYS */;
+/*!40000 ALTER TABLE `huellas` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `odontograma`
@@ -433,8 +561,17 @@ CREATE TABLE `odontograma` (
   PRIMARY KEY (`id`),
   KEY `id_paciente` (`id_paciente`),
   CONSTRAINT `odontograma_ibfk_1` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `odontograma`
+--
+
+LOCK TABLES `odontograma` WRITE;
+/*!40000 ALTER TABLE `odontograma` DISABLE KEYS */;
+/*!40000 ALTER TABLE `odontograma` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `paciente_tutor`
@@ -452,8 +589,17 @@ CREATE TABLE `paciente_tutor` (
   KEY `tutor_id` (`tutor_id`),
   CONSTRAINT `paciente_tutor_ibfk_1` FOREIGN KEY (`paciente_id`) REFERENCES `pacientes` (`id`),
   CONSTRAINT `paciente_tutor_ibfk_2` FOREIGN KEY (`tutor_id`) REFERENCES `tutores` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `paciente_tutor`
+--
+
+LOCK TABLES `paciente_tutor` WRITE;
+/*!40000 ALTER TABLE `paciente_tutor` DISABLE KEYS */;
+/*!40000 ALTER TABLE `paciente_tutor` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `pacientes`
@@ -477,8 +623,17 @@ CREATE TABLE `pacientes` (
   PRIMARY KEY (`id`),
   KEY `id_doctor` (`id_doctor`),
   CONSTRAINT `pacientes_ibfk_1` FOREIGN KEY (`id_doctor`) REFERENCES `usuarios` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=106 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=107 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `pacientes`
+--
+
+LOCK TABLES `pacientes` WRITE;
+/*!40000 ALTER TABLE `pacientes` DISABLE KEYS */;
+/*!40000 ALTER TABLE `pacientes` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `tareas_huella`
@@ -501,8 +656,17 @@ CREATE TABLE `tareas_huella` (
   PRIMARY KEY (`id`),
   KEY `id_tutor` (`id_tutor`),
   CONSTRAINT `tareas_huella_ibfk_1` FOREIGN KEY (`id_tutor`) REFERENCES `tutores` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tareas_huella`
+--
+
+LOCK TABLES `tareas_huella` WRITE;
+/*!40000 ALTER TABLE `tareas_huella` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tareas_huella` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `tratamientos`
@@ -527,8 +691,17 @@ CREATE TABLE `tratamientos` (
   KEY `fk_aprobado_por` (`aprobado_por_idtutor`),
   CONSTRAINT `fk_aprobado_por` FOREIGN KEY (`aprobado_por_idtutor`) REFERENCES `tutores` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_paciente` FOREIGN KEY (`id_paciente`) REFERENCES `pacientes` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tratamientos`
+--
+
+LOCK TABLES `tratamientos` WRITE;
+/*!40000 ALTER TABLE `tratamientos` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tratamientos` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `tutores`
@@ -545,8 +718,17 @@ CREATE TABLE `tutores` (
   `relacion` varchar(50) DEFAULT NULL,
   `fecha_creacion` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `tutores`
+--
+
+LOCK TABLES `tutores` WRITE;
+/*!40000 ALTER TABLE `tutores` DISABLE KEYS */;
+/*!40000 ALTER TABLE `tutores` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `usuarios`
@@ -569,6 +751,16 @@ CREATE TABLE `usuarios` (
   UNIQUE KEY `correo` (`correo`)
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `usuarios`
+--
+
+LOCK TABLES `usuarios` WRITE;
+/*!40000 ALTER TABLE `usuarios` DISABLE KEYS */;
+INSERT INTO `usuarios` VALUES (1,'Emmanuel','admin','emmanuel@gmail.com','$2b$10$t4.GId/O.pm1L7KJtqQYn.w.Y65ZPZ.d4xxPKnH1vPAcbKynRcF1a','doctor','{\n  \"pacientes\": true,\n  \"citas\": true,\n  \"odontograma\": true,\n  \"radiografias\": true,\n  \"usuarios\": true,\n  \"configuracion\": true,\n  \"clinic\": true\n}','2025-04-28 22:21:12'),(2,'Marcela','marcela','marcela@gmail.com','$2b$10$8S7j2DOLomi4uS1pCNx1gOLTe1LvaQBimpQiCj7xFCYjf53bFOrv6','secretary','{\"pacientes\":true,\"citas\":true,\"odontograma\":false,\"radiografias\":false,\"usuarios\":false,\"configuracion\":true,\"clinic\":false}','2025-04-28 22:21:13');
+/*!40000 ALTER TABLE `usuarios` ENABLE KEYS */;
+UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
@@ -577,6 +769,6 @@ CREATE TABLE `usuarios` (
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+/*!40111 SET SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
--- Dump completed on 2025-05-31 19:56:48
+-- Dump completed on 2025-07-08  2:11:48
