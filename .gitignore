@@ -29,3 +29,9 @@ next-env.d.ts
 # Ignorar carpetas desktop y drivers/Huellas
 desktop/
 drivers/Huellas/
+
+# Ignorar carpeta dist y todo su contenido
+/dist/
+
+# Ignorar archivo OdontoLauncher.exe en la raíz
+/OdontoLauncher.exe
