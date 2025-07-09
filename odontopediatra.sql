@@ -752,6 +752,12 @@ CREATE TABLE `usuarios` (
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+CREATE TABLE licencias (
+  id INT PRIMARY KEY,
+  accion INT DEFAULT 0
+);
+
+INSERT INTO licencias (id, accion) VALUES (1, 0);
 --
 -- Dumping data for table `usuarios`
 --
