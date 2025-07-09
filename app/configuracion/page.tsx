@@ -318,6 +318,15 @@ export default function ConfiguracionPage() {
                   </a>
                 </p>
               </div>
+
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold text-primary">Créditos</h3>
+                <p className="text-sm sm:text-base">
+                  Este sistema fue diseñado, creado y desarrollado por <strong>Lehabim Cruz</strong>. 
+                  Para más información, actualizaciones, soporte técnico o para reportar algún problema, 
+                  puedes contactarte al <a href="tel:+522288455191" className="text-blue-500 hover:underline">+52 228 845 5191</a>.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
