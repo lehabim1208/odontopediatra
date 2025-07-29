@@ -1,0 +1,49 @@
+name: Supabase Keep Alive Ping
+
+on:
+  schedule:
+    - cron: '0 9 */6 * *'  # Cada 6 días a las 09:00 UTC
+  workflow_dispatch:  # Puedes ejecutarlo manualmente
+
+jobs:
+  ping-db:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Create ping script
+        run: |
+          echo "import { createClient } from '@supabase/supabase-js';
+
+          const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+          async function runPing() {
+            const { error } = await supabase
+              .from('ping')
+              .insert([{ ping: true }]);
+
+            if (error) {
+              console.error('Error al hacer ping:', error);
+              process.exit(1);
+            }
+
+            console.log('Ping realizado correctamente');
+          }
+
+          runPing();" > ping.js
+
+      - name: Install dependencies
+        run: npm install @supabase/supabase-js
+
+      - name: Run ping
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node ping.js
