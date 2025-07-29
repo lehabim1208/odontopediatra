@@ -3,7 +3,7 @@ name: Supabase Keep Alive Ping
 on:
   schedule:
     - cron: '0 9 */6 * *'  # Cada 6 días a las 09:00 UTC
-  workflow_dispatch:  # Puedes ejecutarlo manualmente
+  workflow_dispatch:  
 
 jobs:
   ping-db:
